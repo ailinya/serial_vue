@@ -1,0 +1,26 @@
+<!--
+ * @Author: nll
+ * @Date: 2025-09-27 21:40:00
+ * @LastEditors: nll
+ * @LastEditTime: 2025-09-27 21:40:00
+ * @Description: IQ频谱分析页面
+-->
+<template>
+  <div class="iq-spectrum-container p-4">
+    <h2 class="text-xl font-bold mb-4">IQ频谱分析</h2>
+    <div class="bg-white p-4 rounded-lg shadow">
+      <p>IQ频谱分析功能开发中...</p>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+// IQ频谱分析相关逻辑
+</script>
+
+<style scoped lang="scss">
+.iq-spectrum-container {
+  height: 100%;
+  overflow-y: auto;
+}
+</style>
