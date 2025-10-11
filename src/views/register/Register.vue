@@ -2,7 +2,7 @@
  * @Author: nll
  * @Date: 2025-09-27 21:40:00
  * @LastEditors: '艾琳爱' '2664840261@qq.com'
- * @LastEditTime: 2025-10-10 14:26:24
+ * @LastEditTime: 2025-10-11 15:27:35
  * @Description: 寄存器读写页面
 -->
 <template>
@@ -208,7 +208,7 @@
             <!-- 32位位编辑器 -->
             <div class="flex items-center justify-center">
               <BitEditor 
-                :value="row.value32bit" 
+                :value="row.value32bit || '0x00000000'" 
                 @update:value="updateRowData(row.id, $event)"
               />
             </div>
@@ -254,12 +254,12 @@
               <n-button 
                 size="tiny" 
                 type="warning" 
-                @click="duplicateRow(row)"
-                title="复制"
+                @click="saveRegister(row)"
+                title="保存"
               >
                 <template #icon>
                   <n-icon>
-                    <span>📋</span>
+                    <span>💾</span>
                   </n-icon>
                 </template>
               </n-button>
@@ -284,16 +284,36 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { NSelect, NButton, NTag, NInput, NIcon, NCheckbox, NInputNumber, useMessage } from 'naive-ui'
 import { useSerialStore } from '@/store/serial'
 import BitEditor from './components/BitEditor.vue'
 
-import { apiGetPortList, apiConnectSerial } from '@/api/register_api'
+import { apiGetPortList, apiConnectSerial, apiDisconnectSerial, apiReadRegister, apiWriteRegister, apiBatchRead, apiBatchWrite, apiSaveRegister, apiListRegisters, apiDeleteRegister, apiBatchDeleteRegisters } from '@/api/register_api'
 // 使用串口状态管理
 const serialStore = useSerialStore()
 const message = useMessage()
 const toggleConnection = async () => {
+  // 如果已连接，执行断开操作
+  if (serialStore.isConnected) {
+    try {
+      const res = await apiDisconnectSerial()
+      console.log('断开连接:', res)
+      if (res.status === 200) {
+        serialStore.isConnected = false
+        message.success(res.message)
+      } else {
+        message.error(res.message)
+      }
+    } catch (error) {
+      serialStore.isConnected = false
+      message.error('断开连接失败')
+      console.error('断开错误:', error)
+    }
+    return
+  }
+
+  // 如果未连接，执行连接操作
   console.log('测试连接');
 
   // 检查串口号是否存在
@@ -366,7 +386,7 @@ const removeCustomBaud = (valStr: string) => {
 
 // 寄存器行数据类型
 interface RegisterRow {
-  id: string
+  id: number
   address: string
   data: string
   value32bit: string
@@ -374,18 +394,10 @@ interface RegisterRow {
 }
 
 // 寄存器行数据
-const registerRows = ref<RegisterRow[]>([
-  {
-    id: '1',
-    address: '0x2047C00',
-    data: '0XFDB25233',
-    value32bit: '0XFDB25233',
-    description: 'GPIO配置寄存器'
-  }
-])
+const registerRows = ref<RegisterRow[]>([])
 
 // 选择状态
-const selectedIds = ref<Set<string>>(new Set())
+const selectedIds = ref<Set<number>>(new Set())
 const selectedCount = computed(() => selectedIds.value.size)
 const isAllSelected = computed(() => registerRows.value.length > 0 && selectedIds.value.size === registerRows.value.length)
 const isIndeterminate = computed(() => selectedIds.value.size > 0 && selectedIds.value.size < registerRows.value.length)
@@ -396,12 +408,46 @@ const getPortList = async () => {
   console.log(res)
 }
 
+const getRegisterList = async () => {
+  try {
+    console.log('获取寄存器列表');
+    const res = await apiListRegisters()
+    console.log('寄存器列表:', res)
+    
+    if (res.success) {
+      if (res.data.items.length > 0) {
+        // 将获取到的寄存器列表转换为表格行数据
+        const registerRowsData = res.data.items.map((item, index) => ({
+          id: item.id || (Date.now() + index),
+          address: item.address,
+          data: item.data || '0x00000000',
+          value32bit: item.value32bit || item.data || '0x00000000',
+          description: item.description || ''
+        }))
+        
+        registerRows.value = registerRowsData
+        message.success(`已加载 ${registerRowsData.length} 个寄存器配置`)
+      } else {
+        // 清空表格数据
+        registerRows.value = []
+        message.info('暂无已保存的寄存器配置')
+      }
+    } else {
+      message.error(`加载失败: ${res.message}`)
+    }
+  } catch (error) {
+    console.error('获取寄存器列表失败:', error)
+    message.error('加载寄存器列表失败')
+  }
+}
+
 onMounted(() => {
   getPortList()
+  getRegisterList()
 })
 
 
-const isRowSelected = (id: string) => selectedIds.value.has(id)
+const isRowSelected = (id: number) => selectedIds.value.has(id)
 const toggleSelectAll = (checked: boolean) => {
   if (checked) {
     const all = new Set(registerRows.value.map(r => r.id))
@@ -410,7 +456,7 @@ const toggleSelectAll = (checked: boolean) => {
     selectedIds.value = new Set()
   }
 }
-const toggleRow = (id: string, checked: boolean) => {
+const toggleRow = (id: number, checked: boolean) => {
   const next = new Set(selectedIds.value)
   if (checked) next.add(id)
   else next.delete(id)
@@ -418,42 +464,110 @@ const toggleRow = (id: string, checked: boolean) => {
 }
 
 // 批量操作
-const bulkRead = () => {
+const bulkRead = async () => {
   if (selectedIds.value.size === 0) return
   if (!serialStore.isConnected) {
     message.error('串口未连接')
     return
   }
-  registerRows.value.forEach(row => {
-    if (selectedIds.value.has(row.id)) {
-      readRegister(row)
+  
+  try {
+    const selectedRows = registerRows.value.filter(row => selectedIds.value.has(row.id))
+    const addresses = selectedRows.map(row => row.address)
+    
+    const res = await apiBatchRead({
+      addresses: addresses,
+      size: 4
+    })
+    
+    console.log('批量读取结果:', res)
+    
+    if (res.success) {
+      // 更新选中行的数据
+      res.results.forEach(result => {
+        const row = registerRows.value.find(r => r.address === result.address)
+        if (row && result.success) {
+          row.data = result.value
+          row.value32bit = result.value
+        }
+      })
+      
+      message.success(`批量读取成功，共处理 ${res.results.length} 个寄存器`)
+    } else {
+      message.error(`批量读取失败: ${res.message}`)
     }
-  })
+  } catch (error) {
+    console.error('批量读取失败:', error)
+    message.error('批量读取失败')
+  }
 }
 
-const bulkWrite = () => {
+const bulkWrite = async () => {
   if (selectedIds.value.size === 0) return
   if (!serialStore.isConnected) {
     message.error('串口未连接')
     return
   }
-  registerRows.value.forEach(row => {
-    if (selectedIds.value.has(row.id)) {
-      writeRegister(row)
+  
+  try {
+    const selectedRows = registerRows.value.filter(row => selectedIds.value.has(row.id))
+    const operations = selectedRows.map(row => ({
+      address: row.address,
+      value: row.data
+    }))
+    
+    const res = await apiBatchWrite({
+      operations: operations
+    })
+    
+    console.log('批量写入结果:', res)
+    
+    if (res.success) {
+      message.success(`批量写入成功，共处理 ${res.results.length} 个寄存器`)
+    } else {
+      message.error(`批量写入失败: ${res.message}`)
     }
-  })
+  } catch (error) {
+    console.error('批量写入失败:', error)
+    message.error('批量写入失败')
+  }
 }
 
-const deleteSelected = () => {
+const deleteSelected = async () => {
   if (selectedIds.value.size === 0) return
-  const toDelete = new Set(selectedIds.value)
-  registerRows.value = registerRows.value.filter(row => !toDelete.has(row.id))
-  selectedIds.value = new Set()
-  message.success('已删除选中项')
+  
+  try {
+    const registerIds = Array.from(selectedIds.value)
+    const res = await apiBatchDeleteRegisters({
+      register_ids: registerIds
+    })
+    
+    console.log('批量删除结果:', res)
+    
+    if (res.success) {
+      message.success(`批量删除成功，共删除 ${res.deleted_count} 个寄存器`)
+      // 重新加载寄存器列表
+      await getRegisterList()
+    } else {
+      message.error(`批量删除失败: ${res.message}`)
+    }
+  } catch (error: any) {
+    console.error('批量删除失败:', error)
+    
+    // 处理详细错误信息
+    if (error.response?.data?.detail) {
+      const detail = error.response.data.detail
+      message.error(`${detail.message} (错误代码: ${detail.error})`)
+    } else if (error.response?.data?.message) {
+      message.error(`批量删除失败: ${error.response.data.message}`)
+    } else {
+      message.error('批量删除失败')
+    }
+  }
 }
 
 // 更新行数据
-const updateRow = (id: string, field: keyof RegisterRow, value: string) => {
+const updateRow = (id: number, field: keyof RegisterRow, value: string) => {
   const row = registerRows.value.find(r => r.id === id)
   if (row) {
     row[field] = value
@@ -461,9 +575,9 @@ const updateRow = (id: string, field: keyof RegisterRow, value: string) => {
 }
 
 // 更新行数据（同步 data 和 value32bit）
-const updateRowData = (id: string, value: string) => {
+const updateRowData = (id: number, value: string) => {
   const row = registerRows.value.find(r => r.id === id)
-  if (row) {
+  if (row && value) {
     const normalizedValue = value.toUpperCase()
     row.data = normalizedValue
     row.value32bit = normalizedValue
@@ -473,57 +587,120 @@ const updateRowData = (id: string, value: string) => {
 // 添加行
 const addRow = () => {
   const newRow: RegisterRow = {
-    id: Date.now().toString(),
+    id: Date.now(),
     address: '0x00000000',
     data: '0x00000000',
     value32bit: '0x00000000',
     description: ''
   }
-  registerRows.value.push(newRow)
-  message.success('已添加新行')
+  
+  // 使用展开运算符创建新数组，确保响应式更新
+  registerRows.value = [...registerRows.value, newRow]
+  console.log('添加新行:', newRow)
+  console.log('当前行数:', registerRows.value.length)
+  // message.success('已添加新行')
 }
 
 // 删除行
-const deleteRow = (id: string) => {
-  const index = registerRows.value.findIndex(r => r.id === id)
-  if (index > -1) {
-    registerRows.value.splice(index, 1)
-    selectedIds.value.delete(id)
-    message.success('已删除行')
+const deleteRow = async (id: number) => {
+  try {
+    const res = await apiDeleteRegister(id)
+    console.log('删除寄存器结果:', res)
+    
+    if (res.success) {
+      message.success(`寄存器 ${id} 删除成功`)
+      // 重新加载寄存器列表
+      await getRegisterList()
+    } else {
+      message.error(`删除失败: ${res.message}`)
+    }
+  } catch (error: any) {
+    console.error('删除寄存器失败:', error)
+    
+    // 处理详细错误信息
+    if (error.response?.data?.detail) {
+      const detail = error.response.data.detail
+      message.error(`${detail.message} (错误代码: ${detail.error})`)
+    } else if (error.response?.data?.message) {
+      message.error(`删除失败: ${error.response.data.message}`)
+    } else {
+      message.error(`删除寄存器 ${id} 失败`)
+    }
   }
 }
 
-// 复制行
-const duplicateRow = (row: RegisterRow) => {
-  const newRow: RegisterRow = {
-    id: Date.now().toString(),
-    address: row.address,
-    data: row.data,
-    value32bit: row.value32bit,
-    description: row.description + ' (副本)'
+// 保存寄存器
+const saveRegister = async (row: RegisterRow) => {
+  try {
+    const res = await apiSaveRegister({
+      address: row.address,
+      data: row.data,
+      value32bit: row.value32bit,
+      description: row.description
+    })
+    
+    console.log('保存寄存器结果:', res)
+    
+    if (res.success) {
+      message.success(`寄存器 ${row.address} 保存成功`)
+    } else {
+      message.error(`保存失败: ${res.message}`)
+    }
+  } catch (error: any) {
+    console.error('保存寄存器失败:', error)
+    
+    // 处理详细错误信息
+    if (error.response?.data?.detail) {
+      const detail = error.response.data.detail
+      message.error(`${detail.message} (错误代码: ${detail.error})`)
+    } else if (error.response?.data?.message) {
+      message.error(`保存失败: ${error.response.data.message}`)
+    } else {
+      message.error(`保存寄存器 ${row.address} 失败`)
+    }
   }
-  registerRows.value.push(newRow)
-  message.success('已复制行')
 }
 
 // 读取寄存器
-const readRegister = (row: RegisterRow) => {
+const readRegister = async (row: RegisterRow) => {
   if (!serialStore.isConnected) {
     message.error('串口未连接')
     return
   }
-  console.log(`读取寄存器: ${row.address}`)
-  message.success(`读取寄存器 ${row.address}`)
+  
+  try {
+    const res = await apiReadRegister({ address: row.address })
+    console.log('读取寄存器结果:', res)
+    
+    // 更新行数据
+    row.data = res.value
+    row.value32bit = res.value
+    
+    message.success(`读取寄存器 ${row.address} 成功: ${res.value}`)
+  } catch (error) {
+    console.error('读取寄存器失败:', error)
+    message.error(`读取寄存器 ${row.address} 失败`)
+  }
 }
 
 // 写入寄存器
-const writeRegister = (row: RegisterRow) => {
+const writeRegister = async (row: RegisterRow) => {
   if (!serialStore.isConnected) {
     message.error('串口未连接')
     return
   }
-  console.log(`写入寄存器: ${row.address} = ${row.data}`)
-  message.success(`写入寄存器 ${row.address}`)
+  
+  try {
+    const res = await apiWriteRegister({ 
+      address: row.address, 
+      value: row.data 
+    })
+    console.log('写入寄存器结果:', res)
+    message.success(`写入寄存器 ${row.address} 成功`)
+  } catch (error) {
+    console.error('写入寄存器失败:', error)
+    message.error(`写入寄存器 ${row.address} 失败`)
+  }
 }
 
 // 导出配置

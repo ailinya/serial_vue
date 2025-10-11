@@ -57,7 +57,9 @@ const emit = defineEmits<{
 
 // 计算属性
 const numValue = computed(() => {
-  return parseInt(props.value.replace('0x', ''), 16) || 0
+  if (!props.value) return 0
+  const cleanValue = props.value.replace('0x', '').replace('0X', '')
+  return parseInt(cleanValue, 16) || 0
 })
 
 const byteGroups = computed(() => {
