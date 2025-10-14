@@ -2,7 +2,7 @@
  * @Author: nll
  * @Date: 2025-09-28 18:00:00
  * @LastEditors: '艾琳爱' '2664840261@qq.com'
- * @LastEditTime: 2025-10-14 10:41:03
+ * @LastEditTime: 2025-10-14 11:12:06
  * @Description: 32位位编辑器组件
 -->
 <template>
@@ -36,9 +36,35 @@
           </button>
         </div>
       </div>
+      
+      <!-- 全部设置按钮 - 上下排列 -->
+      <div class="flex flex-col gap-1 ml-2">
+        <button
+          @click="setAllTo0"
+          @touchstart="setAllTo0"
+          class="px-2 py-1 bg-gray-500 text-white text-xs rounded hover:bg-gray-600 active:bg-gray-700 active:scale-95 transition-all duration-150 w-8 h-6 flex items-center justify-center cursor-pointer select-none"
+          title="全0"
+        >
+          <div class="flex flex-row items-center gap-0.5">
+            <span>全</span>
+            <span>0</span>
+          </div>
+        </button>
+        <button
+          @click="setAllTo1"
+          @touchstart="setAllTo1"
+          class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-500 active:bg-blue-500 active:scale-95 transition-all duration-150 w-8 h-6 flex items-center justify-center cursor-pointer select-none"
+          title="全1"
+        >
+          <div class="flex flex-row items-center gap-0.5">
+            <span>全</span>
+            <span>1</span>
+          </div>
+        </button>
+      </div>
     </div>
   </div>
-</template>
+</template>ba
 
 <script setup lang="ts">
 import { computed } from 'vue'
@@ -93,6 +119,17 @@ const toggleBit = (groupIndex: number, bitIndex: number) => {
   const hexValue = `0x${(newValue >>> 0).toString(16).toUpperCase().padStart(8, '0')}`
   emit('update:value', hexValue)
 }
+
+// 全部设置方法
+const setAllTo0 = () => {
+  const hexValue = '0x00000000'
+  emit('update:value', hexValue)
+}
+
+const setAllTo1 = () => {
+  const hexValue = '0xFFFFFFFF'
+  emit('update:value', hexValue)
+}
 </script>
 
 <style scoped lang="scss">
@@ -110,6 +147,32 @@ const toggleBit = (groupIndex: number, bitIndex: number) => {
     &:last-child {
       border-top-right-radius: 4px;
       border-bottom-right-radius: 4px;
+    }
+  }
+  
+  .writing-mode-horizontal {
+    writing-mode: horizontal-tb;
+    text-orientation: mixed;
+  }
+  
+  .flex-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+  
+  // 手势点击反馈
+  button {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    
+    &:active {
+      transform: scale(0.95);
     }
   }
 }
