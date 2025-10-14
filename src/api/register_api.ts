@@ -199,3 +199,17 @@ export interface BatchDeleteResp {
 export function apiBatchDeleteRegisters(payload: BatchDeleteReq) {
   return post<BatchDeleteResp>('/register/saved/batch-delete', payload)
 }
+
+// 发送串口命令
+export interface SendCommandReq {
+  command: string
+}
+
+export interface SendCommandResp {
+  success: boolean
+  message: string
+}
+
+export function apiSendCommand(payload: SendCommandReq) {
+  return post<SendCommandResp>('/register/send-command', payload)
+}

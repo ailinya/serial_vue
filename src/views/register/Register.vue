@@ -68,6 +68,12 @@
         <n-tag :type="serialStore.isConnected ? 'success' : 'default'" class="ml-2">
           {{ serialStore.isConnected ? '已连接' : '未连接' }}
         </n-tag>
+        <n-checkbox 
+          v-model:checked="echoCloseEnabled" 
+          class="ml-4"
+        >
+          echoclose
+        </n-checkbox>
       </div>
       
       <!-- 串口未连接提示 -->
@@ -293,10 +299,13 @@ import { NSelect, NButton, NTag, NInput, NIcon, NCheckbox, NInputNumber, useMess
 import { useSerialStore } from '@/store/serial'
 import BitEditor from './components/BitEditor.vue'
 
-import { apiGetPortList, apiConnectSerial, apiDisconnectSerial, apiReadRegister, apiWriteRegister, apiBatchRead, apiBatchWrite, apiSaveRegister, apiListRegisters, apiDeleteRegister, apiBatchDeleteRegisters } from '@/api/register_api'
+import { apiGetPortList, apiConnectSerial, apiDisconnectSerial, apiReadRegister, apiWriteRegister, apiBatchRead, apiBatchWrite, apiSaveRegister, apiListRegisters, apiDeleteRegister, apiBatchDeleteRegisters, apiSendCommand } from '@/api/register_api'
 // 使用串口状态管理
 const serialStore = useSerialStore()
 const message = useMessage()
+
+// echoclose复选框状态，默认勾选
+const echoCloseEnabled = ref(true)
 const toggleConnection = async () => {
   // 如果已连接，执行断开操作
   if (serialStore.isConnected) {
@@ -337,6 +346,24 @@ const toggleConnection = async () => {
     if (res.status === 200) {
       serialStore.isConnected = true
       message.success(res.message)
+      
+      // 如果echoclose复选框勾选，连接成功后发送echoclose 0命令
+      if (echoCloseEnabled.value) {
+        try {
+          console.log('发送echoclose 0命令...')
+          const cmdRes = await apiSendCommand({ command: 'echoclose 0' })
+          if (cmdRes.success) {
+            console.log('echoclose 0命令发送成功')
+            message.info('已发送echoclose 0命令')
+          } else {
+            console.warn('echoclose 0命令发送失败:', cmdRes.message)
+            message.warning(`echoclose命令发送失败: ${cmdRes.message}`)
+          }
+        } catch (cmdError) {
+          console.error('发送echoclose 0命令失败:', cmdError)
+          message.warning('发送echoclose命令失败')
+        }
+      }
     } else {
       serialStore.isConnected = false
       message.error(res.message)
