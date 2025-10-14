@@ -2,7 +2,7 @@
  * @Author: nll
  * @Date: 2025-09-27 21:40:00
  * @LastEditors: '艾琳爱' '2664840261@qq.com'
- * @LastEditTime: 2025-10-14 10:05:38
+ * @LastEditTime: 2025-10-14 10:46:46
  * @Description: 寄存器读写页面
 -->
 <template>
@@ -43,7 +43,7 @@
                 />
                 <n-button size="tiny" type="primary" @click="applyCustomBaud">确定</n-button>
               </div>
-              <div v-if="customBaudSet.size > 0" class="mt-2 flex flex-wrap gap-2">
+              <div v-if="customBaudSet.size > 0" class="mt-4 flex flex-wrap gap-2">
                 <n-tag v-for="val in Array.from(customBaudSet)" :key="val" size="small" type="default" closable @close="() => removeCustomBaud(val)">
                   {{ val }} bps
                 </n-tag>
@@ -71,7 +71,7 @@
       </div>
       
       <!-- 串口未连接提示 -->
-      <div v-if="!serialStore.isConnected" class="mt-2 p-1 bg-yellow-50 border border-yellow-200 rounded-md">
+      <div v-if="!serialStore.isConnected" class="mt-4 p-1 bg-yellow-50 border border-yellow-200 rounded-md">
         <div class="flex items-center">
           <span class="text-yellow-600 mr-2">①</span>
           <span class="text-yellow-800 text-sm">
@@ -190,7 +190,7 @@
             </div>
 
             <!-- 地址 -->
-            <div class="flex items-center">
+            <div class="flex items-center mt-4">
               <n-input 
                 v-model:value="row.address" 
                 placeholder="0x00000000"
@@ -200,7 +200,7 @@
             </div>
 
             <!-- 数据 -->
-            <div class="flex items-center">
+            <div class="flex items-center mt-4">
               <n-input 
                 v-model:value="row.data" 
                 placeholder="0x00000000"
@@ -209,7 +209,7 @@
               />
             </div>
        <!-- 操作合并 -->
-       <div class="flex items-center justify-center gap-4">
+       <div class="flex items-center justify-center gap-4 mt-4">
               <n-button 
                 size="tiny" 
                 type="info" 
@@ -270,7 +270,7 @@
             </div>
 
             <!-- 说明 -->
-            <div class="flex items-center">
+            <div class="flex items-center mt-4">
               <n-input 
                 v-model:value="row.description" 
                 placeholder="寄存器说明"
