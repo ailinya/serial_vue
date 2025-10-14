@@ -75,13 +75,18 @@ export const useSerialStore = defineStore('serial', () => {
 
   // 连接 WebSocket
   const connectWebSocket = () => {
+    // 如果已经有连接在进行中，不要重复连接
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
+      console.log('⚠️ WebSocket 已存在，跳过重复连接')
+      return
+    }
+    
     console.log('🚀 开始连接 WebSocket...');
     
     try {
       // 先尝试通过Vite代理连接
       const wsUrl = '/ws/serial-ports'
       console.log('📍 WebSocket URL (通过代理):', wsUrl)
-      console.log('🌐 当前页面URL:', window.location.href)
       
       ws = new WebSocket(wsUrl)
       
@@ -90,21 +95,18 @@ export const useSerialStore = defineStore('serial', () => {
         if (ws && ws.readyState === WebSocket.CONNECTING) {
           console.log('⚠️ 代理连接超时，尝试直接连接后端...')
           ws.close()
-          tryDirectConnection()
+          // 延迟一下再尝试直接连接，避免立即重连
+          setTimeout(() => {
+            if (isMonitoring.value) {
+              tryDirectConnection()
+            }
+          }, 1000)
         }
-      }, 5000)
+      }, 3000) // 减少超时时间到3秒
       
-      // 立即检查连接状态
-      console.log('📊 WebSocket创建后状态:', ws.readyState)
-      console.log('📋 状态说明: 0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED')
-      
-      // 添加连接状态监听
       ws.onopen = () => {
         clearTimeout(proxyTimeout)
         console.log('✅ 串口监听 WebSocket 已连接')
-        console.log('📊 WebSocket readyState:', ws?.readyState)
-        console.log('🔗 WebSocket URL:', ws?.url)
-        console.log('📤 发送获取串口列表请求...')
         // 请求当前可用串口列表
         ws?.send(JSON.stringify({ type: 'get_ports' }))
       }
@@ -124,15 +126,14 @@ export const useSerialStore = defineStore('serial', () => {
             portOptions.value = newOptions
             
             // 自动选择第一个串口
-            if (data.ports.length > 0) {
+            if (data.ports.length > 0 && !selectedPort.value) {
               selectedPort.value = data.ports[0]
               console.log('自动选择第一个串口:', data.ports[0])
-            } else {
+            } else if (data.ports.length === 0) {
               selectedPort.value = ''
             }
             
             console.log('串口列表已更新:', data.ports)
-            console.log('下拉框选项已更新:', newOptions)
           }
         } catch (e) {
           console.error('解析 WebSocket 消息失败:', e)
@@ -140,58 +141,39 @@ export const useSerialStore = defineStore('serial', () => {
       }
 
       ws.onclose = (event) => {
+        clearTimeout(proxyTimeout)
         console.log('❌ 串口监听 WebSocket 已断开')
-        console.log('🔢 关闭代码:', event.code)
-        console.log('📝 关闭原因:', event.reason)
-        console.log('🧹 是否正常关闭:', event.wasClean)
-        console.log('📊 当前状态:', ws?.readyState)
+        console.log('🔢 关闭代码:', event.code, '📝 关闭原因:', event.reason)
         ws = null
-        // 自动重连
-        if (isMonitoring.value) {
-          console.log('⏰ 3秒后尝试重连...')
+        
+        // 只有在监听状态且不是正常关闭时才重连
+        if (isMonitoring.value && !event.wasClean && event.code !== 1000) {
+          console.log('⏰ 5秒后尝试重连...')
+          if (reconnectTimer) {
+            clearTimeout(reconnectTimer)
+          }
           reconnectTimer = setTimeout(() => {
-            connectWebSocket()
-          }, 3000)
+            if (isMonitoring.value) {
+              connectWebSocket()
+            }
+          }, 5000) // 增加重连间隔到5秒
         }
       }
 
       ws.onerror = (error) => {
+        clearTimeout(proxyTimeout)
         console.error('💥 串口监听 WebSocket 错误:', error)
-        console.error('📊 WebSocket 状态:', ws?.readyState)
-        console.error('🔗 WebSocket URL:', ws?.url)
-        console.error('📋 错误详情:', error)
         
-        // 尝试直接连接后端（绕过代理）
-        console.log('🔄 尝试直接连接后端WebSocket...')
-        setTimeout(() => {
-          tryDirectConnection()
-        }, 2000)
-      }
-      
-      // 添加连接过程监控
-      const connectionMonitor = setInterval(() => {
-        if (ws) {
-          const state = ws.readyState
-          console.log(`🔄 连接状态监控: ${state} (${getStateName(state)})`)
-          
-          if (state === WebSocket.OPEN) {
-            console.log('✅ 连接成功，停止监控')
-            clearInterval(connectionMonitor)
-          } else if (state === WebSocket.CLOSED) {
-            console.log('❌ 连接已关闭，停止监控')
-            clearInterval(connectionMonitor)
-          }
-        } else {
-          console.log('⚠️ WebSocket对象不存在')
-          clearInterval(connectionMonitor)
+        // 如果是代理连接失败，尝试直接连接
+        if (ws && ws.readyState === WebSocket.CLOSED) {
+          console.log('🔄 代理连接失败，尝试直接连接后端...')
+          setTimeout(() => {
+            if (isMonitoring.value) {
+              tryDirectConnection()
+            }
+          }, 2000)
         }
-      }, 500)
-      
-      // 10秒后停止监控
-      setTimeout(() => {
-        clearInterval(connectionMonitor)
-        console.log('⏹️ 连接监控已停止')
-      }, 10000)
+      }
       
     } catch (error) {
       console.error('💥 创建 WebSocket 连接失败:', error)
@@ -293,6 +275,12 @@ export const useSerialStore = defineStore('serial', () => {
 
   // 直接连接后端WebSocket（绕过Vite代理）
   const tryDirectConnection = () => {
+    // 如果已经有连接在进行中，不要重复连接
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
+      console.log('⚠️ WebSocket 已存在，跳过重复直接连接')
+      return
+    }
+    
     console.log('🔄 尝试直接连接后端WebSocket...')
     
     try {
@@ -304,9 +292,7 @@ export const useSerialStore = defineStore('serial', () => {
       
       ws.onopen = () => {
         console.log('✅ 直接连接后端WebSocket成功')
-        console.log('📊 WebSocket readyState:', ws?.readyState)
-        console.log('🔗 WebSocket URL:', ws?.url)
-        console.log('📤 发送获取串口列表请求...')
+        // 请求当前可用串口列表
         ws?.send(JSON.stringify({ type: 'get_ports' }))
       }
 
@@ -314,6 +300,9 @@ export const useSerialStore = defineStore('serial', () => {
         try {
           const data = JSON.parse(event.data)
           if (data.type === 'ports_update') {
+            // 检查串口状态变化
+            checkPortStatus(data.ports)
+            
             // 更新串口列表
             const newOptions = data.ports.map((port: string) => ({
               label: port,
@@ -322,10 +311,10 @@ export const useSerialStore = defineStore('serial', () => {
             portOptions.value = newOptions
             
             // 自动选择第一个串口
-            if (data.ports.length > 0) {
+            if (data.ports.length > 0 && !selectedPort.value) {
               selectedPort.value = data.ports[0]
               console.log('✅ 自动选择第一个串口:', data.ports[0])
-            } else {
+            } else if (data.ports.length === 0) {
               selectedPort.value = ''
             }
             
@@ -338,22 +327,25 @@ export const useSerialStore = defineStore('serial', () => {
 
       ws.onclose = (event) => {
         console.log('❌ 直接连接WebSocket已断开')
-        console.log('🔢 关闭代码:', event.code)
-        console.log('📝 关闭原因:', event.reason)
+        console.log('🔢 关闭代码:', event.code, '📝 关闭原因:', event.reason)
         ws = null
-        // 自动重连
-        if (isMonitoring.value) {
-          console.log('⏰ 3秒后尝试重连...')
+        
+        // 只有在监听状态且不是正常关闭时才重连
+        if (isMonitoring.value && !event.wasClean && event.code !== 1000) {
+          console.log('⏰ 5秒后尝试重连...')
+          if (reconnectTimer) {
+            clearTimeout(reconnectTimer)
+          }
           reconnectTimer = setTimeout(() => {
-            connectWebSocket()
-          }, 3000)
+            if (isMonitoring.value) {
+              connectWebSocket()
+            }
+          }, 5000) // 增加重连间隔到5秒
         }
       }
 
       ws.onerror = (error) => {
         console.error('💥 直接连接WebSocket错误:', error)
-        console.error('📊 WebSocket 状态:', ws?.readyState)
-        console.error('🔗 WebSocket URL:', ws?.url)
         console.log('💡 建议: 检查后端WebSocket服务是否正在运行')
       }
       
@@ -376,24 +368,10 @@ export const useSerialStore = defineStore('serial', () => {
   // 检查WebSocket连接状态
   const checkWebSocketStatus = () => {
     if (ws) {
-      console.log('WebSocket 状态:', ws.readyState)
+      const stateName = getStateName(ws.readyState)
+      console.log(`WebSocket 状态: ${stateName} (${ws.readyState})`)
+      // 保留 URL 日志用于调试
       console.log('WebSocket URL:', ws.url)
-      switch (ws.readyState) {
-        case WebSocket.CONNECTING:
-          console.log('WebSocket 状态: 连接中...')
-          break
-        case WebSocket.OPEN:
-          console.log('WebSocket 状态: 已连接')
-          break
-        case WebSocket.CLOSING:
-          console.log('WebSocket 状态: 关闭中...')
-          break
-        case WebSocket.CLOSED:
-          console.log('WebSocket 状态: 已关闭')
-          break
-        default:
-          console.log('WebSocket 状态: 未知')
-      }
     } else {
       console.log('WebSocket 未初始化')
     }

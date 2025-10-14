@@ -45,7 +45,7 @@
               </div>
               <div v-if="customBaudSet.size > 0" class="mt-4 flex flex-wrap gap-2">
                 <n-tag v-for="val in Array.from(customBaudSet)" :key="val" size="small" type="default" closable @close="() => removeCustomBaud(val)">
-                  {{ val }} bps
+                  {{ val }}
                 </n-tag>
               </div>
             </div>
@@ -369,7 +369,7 @@ const applyCustomBaud = () => {
   const valStr = String(customBaud.value)
   const exists = (serialStore.baudRateOptions as any[]).some((o: any) => String(o.value) === valStr)
   if (!exists) {
-    (serialStore.baudRateOptions as any[]).push({ label: `${valStr} bps`, value: valStr })
+    (serialStore.baudRateOptions as any[]).push({ label: valStr, value: valStr })
     const next = new Set(customBaudSet.value); next.add(valStr); customBaudSet.value = next
   }
   serialStore.updateBaudRate(valStr)
