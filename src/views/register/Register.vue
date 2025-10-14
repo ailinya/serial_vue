@@ -183,7 +183,7 @@
             </div>
 
             <!-- 序号（拖拽句柄） -->
-            <div class="flex items-center justify-center cursor-move select-none" title="拖动以排序">
+            <div class="flex items-center justify-center cursor-move select-none" title="拖动以排序"  mt-4>
               <span class="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-sm font-medium">
                 {{ index + 1 }}
               </span>
