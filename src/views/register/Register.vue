@@ -490,13 +490,21 @@ const bulkRead = async () => {
       // 更新选中行的数据
       res.results.forEach(result => {
         const row = registerRows.value.find(r => r.address === result.address)
-        if (row && result.success) {
+        if (row && result.status === 'success') {  // 修复：检查 status 而不是 success
           row.data = result.value
           row.value32bit = result.value
         }
       })
       
-      message.success(`批量读取成功，共处理 ${res.results.length} 个寄存器`)
+      // 统计成功和失败的数量
+      const successCount = res.results.filter(r => r.status === 'success').length
+      const failedCount = res.results.filter(r => r.status === 'failed').length
+      
+      if (failedCount > 0) {
+        message.warning(`批量读取完成，成功 ${successCount} 个，失败 ${failedCount} 个`)
+      } else {
+        message.success(`批量读取成功，共处理 ${res.results.length} 个寄存器`)
+      }
     } else {
       message.error(`批量读取失败: ${res.message}`)
     }
@@ -527,7 +535,15 @@ const bulkWrite = async () => {
     console.log('批量写入结果:', res)
     
     if (res.success) {
-      message.success(`批量写入成功，共处理 ${res.results.length} 个寄存器`)
+      // 统计成功和失败的数量
+      const successCount = res.results.filter(r => r.status === 'success').length
+      const failedCount = res.results.filter(r => r.status === 'failed').length
+      
+      if (failedCount > 0) {
+        message.warning(`批量写入完成，成功 ${successCount} 个，失败 ${failedCount} 个`)
+      } else {
+        message.success(`批量写入成功，共处理 ${res.results.length} 个寄存器`)
+      }
     } else {
       message.error(`批量写入失败: ${res.message}`)
     }
