@@ -94,57 +94,59 @@
     <div class="register-table bg-white rounded-lg shadow-sm border">
       <!-- 表头工具栏 -->
       <div class="table-header p-4 border-b border-gray-200">
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-start">
           <div class="flex items-center gap-2">
             <h3 class="text-lg font-semibold text-gray-700">• 寄存器读写表</h3>
             <n-tag v-if="selectedCount > 0" size="small" type="info">已选择 {{ selectedCount }} 行</n-tag>
-          </div>
-          <div class="flex items-center gap-2">
-            <!-- 当有选中项时显示批量操作按钮 -->
-            <template v-if="selectedCount > 0">
-              <n-button tertiary type="info" size="small" @click="bulkRead" class="flex items-center gap-1">
-                <template #icon>
-                  <n-icon><span>👁️</span></n-icon>
-                </template>
-                批量读取
-              </n-button>
-              <n-button tertiary type="success" size="small" @click="bulkWrite" class="flex items-center gap-1">
-                <template #icon>
-                  <n-icon><span>🚀</span></n-icon>
-                </template>
-                批量写入
-              </n-button>
-              <n-button tertiary type="error" size="small" @click="deleteSelected" class="flex items-center gap-1">
-                <template #icon>
-                  <n-icon><span>➖</span></n-icon>
-                </template>
-                删除选中
-              </n-button>
-            </template>
-            <n-button type="info" size="small" @click="importConfig" class="flex items-center gap-1">
-              <template #icon>
-                <n-icon>
-                  <span>📥</span>
-                </n-icon>
+
+            <!-- 将工具按钮移动到标题后，使其更靠左 -->
+            <div class="flex items-center gap-2 ml-4">
+              <!-- 当有选中项时显示批量操作按钮 -->
+              <template v-if="selectedCount > 0">
+                <n-button tertiary type="info" size="small" @click="bulkRead" class="flex items-center gap-1">
+                  <template #icon>
+                    <n-icon><span>👁️</span></n-icon>
+                  </template>
+                  批量读取
+                </n-button>
+                <n-button tertiary type="success" size="small" @click="bulkWrite" class="flex items-center gap-1">
+                  <template #icon>
+                    <n-icon><span>🚀</span></n-icon>
+                  </template>
+                  批量写入
+                </n-button>
+                <n-button tertiary type="error" size="small" @click="deleteSelected" class="flex items-center gap-1">
+                  <template #icon>
+                    <n-icon><span>➖</span></n-icon>
+                  </template>
+                  删除选中
+                </n-button>
               </template>
-              导入配置
-            </n-button>
-            <n-button type="info" size="small" @click="exportConfig" class="flex items-center gap-1">
-              <template #icon>
-                <n-icon>
-                  <span>📤</span>
-                </n-icon>
-              </template>
-              导出配置
-            </n-button>
-            <n-button type="primary" size="small" @click="addRow" class="flex items-center gap-1">
-              <template #icon>
-                <n-icon>
-                  <span>+</span>
-                </n-icon>
-              </template>
-              添加行
-            </n-button>
+              <n-button type="info" size="small" @click="importConfig" class="flex items-center gap-1">
+                <template #icon>
+                  <n-icon>
+                    <span>📥</span>
+                  </n-icon>
+                </template>
+                导入配置
+              </n-button>
+              <n-button type="info" size="small" @click="exportConfig" class="flex items-center gap-1">
+                <template #icon>
+                  <n-icon>
+                    <span>📤</span>
+                  </n-icon>
+                </template>
+                导出配置
+              </n-button>
+              <n-button type="primary" size="small" @click="addRow" class="flex items-center gap-1">
+                <template #icon>
+                  <n-icon>
+                    <span>+</span>
+                  </n-icon>
+                </template>
+                添加行
+              </n-button>
+            </div>
           </div>
         </div>
       </div>
