@@ -1,38 +1,38 @@
 <!--
  * @Author: nll
  * @Date: 2025-09-28 18:00:00
- * @LastEditors: nll
- * @LastEditTime: 2025-09-29 14:53:39
+ * @LastEditors: '艾琳爱' '2664840261@qq.com'
+ * @LastEditTime: 2025-10-14 10:41:03
  * @Description: 32位位编辑器组件
 -->
 <template>
   <div class="bit-editor">
-    <!-- 32位位编辑器 - 紧凑型布局 -->
-    <div class="flex gap-1 items-center justify-center py-1">
-      <!-- 32位，每8位一组，从高位到低位 -->
-      <div v-for="(byteGroup, byteIndex) in byteGroups" :key="byteIndex" class="flex flex-col gap-1">
+    <!-- 32位位编辑器 - 4位一组布局 -->
+    <div class="flex gap-6 items-center justify-center">
+      <!-- 32位，每4位一组，从高位到低位 -->
+      <div v-for="(_, groupIndex) in bitGroups" :key="groupIndex" class="flex flex-col gap-[2px]">
         <!-- 每一位的序号标注 -->
         <div class="flex gap-[10px]">
           <div 
-            v-for="(bitIndex) in 8" 
+            v-for="(bitIndex) in 4" 
             :key="bitIndex"
-            class="w-4 text-center text-[12px] text-gray-500 font-mono"
+            class="w-4 text-center text-[16px] text-gray-500 font-mono"
           >
-            {{ getActualBitIndex(byteIndex, bitIndex) }}
+            {{ getActualBitIndex(groupIndex, bitIndex) }}
           </div>
         </div>
         
         <!-- 位值按钮组 -->
-        <div class="flex gap-[10px]">
+        <div class="flex gap-[5px]">
           <button
-            v-for="(bitIndex) in 8" 
+            v-for="(bitIndex) in 4" 
             :key="bitIndex"
             type="button"
-            :class="getBitButtonClass(byteIndex, bitIndex)"
-            @click="toggleBit(byteIndex, bitIndex)"
-            :title="`Bit ${getActualBitIndex(byteIndex, bitIndex)}: ${getBitValue(byteIndex, bitIndex) ? '1' : '0'} (点击切换)`"
+            :class="getBitButtonClass(groupIndex, bitIndex)"
+            @click="toggleBit(groupIndex, bitIndex)"
+            :title="`Bit ${getActualBitIndex(groupIndex, bitIndex)}: ${getBitValue(groupIndex, bitIndex) ? '1' : '0'} (点击切换)`"
           >
-            {{ getBitValue(byteIndex, bitIndex) ? '1' : '0' }}
+            {{ getBitValue(groupIndex, bitIndex) ? '1' : '0' }}
           </button>
         </div>
       </div>
@@ -62,23 +62,23 @@ const numValue = computed(() => {
   return parseInt(cleanValue, 16) || 0
 })
 
-const byteGroups = computed(() => {
-  return Array.from({ length: 4 }, (_, index) => index)
+const bitGroups = computed(() => {
+  return Array.from({ length: 8 }, (_, index) => index)
 })
 
 // 方法
-const getActualBitIndex = (byteIndex: number, bitIndex: number) => {
-  return (3 - byteIndex) * 8 + (8 - bitIndex)
+const getActualBitIndex = (groupIndex: number, bitIndex: number) => {
+  return (7 - groupIndex) * 4 + (4 - bitIndex)
 }
 
-const getBitValue = (byteIndex: number, bitIndex: number) => {
-  const actualBitIndex = getActualBitIndex(byteIndex, bitIndex)
+const getBitValue = (groupIndex: number, bitIndex: number) => {
+  const actualBitIndex = getActualBitIndex(groupIndex, bitIndex)
   return (numValue.value & (1 << actualBitIndex)) !== 0
 }
 
-const getBitButtonClass = (byteIndex: number, bitIndex: number) => {
-  const isSet = getBitValue(byteIndex, bitIndex)
-  const baseClass = 'w-4 h-4 text-[10px] font-mono font-bold cursor-pointer transition-all duration-150 hover:scale-105 active:scale-95 flex items-center justify-center leading-none'
+const getBitButtonClass = (groupIndex: number, bitIndex: number) => {
+  const isSet = getBitValue(groupIndex, bitIndex)
+  const baseClass = 'w-5 h-5 text-[16px] font-mono font-bold cursor-pointer transition-all duration-150 hover:scale-105 active:scale-95 flex items-center justify-center leading-none'
   
   if (isSet) {
     return `${baseClass} bg-blue-500 text-white shadow-sm border border-blue-600`
@@ -87,8 +87,8 @@ const getBitButtonClass = (byteIndex: number, bitIndex: number) => {
   }
 }
 
-const toggleBit = (byteIndex: number, bitIndex: number) => {
-  const actualBitIndex = getActualBitIndex(byteIndex, bitIndex)
+const toggleBit = (groupIndex: number, bitIndex: number) => {
+  const actualBitIndex = getActualBitIndex(groupIndex, bitIndex)
   const newValue = numValue.value ^ (1 << actualBitIndex)
   const hexValue = `0x${(newValue >>> 0).toString(16).toUpperCase().padStart(8, '0')}`
   emit('update:value', hexValue)

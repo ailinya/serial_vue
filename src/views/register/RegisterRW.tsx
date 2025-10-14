@@ -584,7 +584,7 @@ export function RegisterRW() {
             return {
               id: Date.now().toString() + index, // 生成新的ID
               address: item.address || '0x00000000',
-              data: item.data || '0x0000',
+              data: item.data || '0x00000000',
               value32bit: item.value32bit || '0x00000000',
               description: item.description || '',
               isSelected: item.isSelected || false

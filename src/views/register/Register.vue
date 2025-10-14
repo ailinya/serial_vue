@@ -2,7 +2,7 @@
  * @Author: nll
  * @Date: 2025-09-27 21:40:00
  * @LastEditors: '艾琳爱' '2664840261@qq.com'
- * @LastEditTime: 2025-10-11 15:27:35
+ * @LastEditTime: 2025-10-14 10:05:38
  * @Description: 寄存器读写页面
 -->
 <template>
@@ -79,6 +79,9 @@
           </span>
         </div>
       </div>
+      
+   
+      
     </div>
 
     <!-- 寄存器读写表 -->
@@ -150,9 +153,10 @@
           <div class="text-center">序号</div>
           <div class="text-center">地址</div>
           <div class="text-center">数据</div>
+          <div class="text-center">操作</div>
           <div class="text-center">32bit</div>
           <div class="text-center">说明</div>
-          <div class="text-center">操作</div>
+       
         </div>
 
         <!-- 表格行 -->
@@ -204,27 +208,8 @@
                 @update:value="updateRowData(row.id, $event)"
               />
             </div>
-
-            <!-- 32位位编辑器 -->
-            <div class="flex items-center justify-center">
-              <BitEditor 
-                :value="row.value32bit || '0x00000000'" 
-                @update:value="updateRowData(row.id, $event)"
-              />
-            </div>
-
-            <!-- 说明 -->
-            <div class="flex items-center">
-              <n-input 
-                v-model:value="row.description" 
-                placeholder="寄存器说明"
-                class="text-sm"
-                @update:value="updateRow(row.id, 'description', $event)"
-              />
-            </div>
-
-            <!-- 操作合并 -->
-            <div class="flex items-center justify-center gap-1">
+       <!-- 操作合并 -->
+       <div class="flex items-center justify-center gap-4">
               <n-button 
                 size="tiny" 
                 type="info" 
@@ -276,6 +261,25 @@
                 </template>
               </n-button>
             </div>
+            <!-- 32位位编辑器 -->
+            <div class="flex items-center justify-center">
+              <BitEditor 
+                :value="row.value32bit || '0x00000000'" 
+                @update:value="updateRowData(row.id, $event)"
+              />
+            </div>
+
+            <!-- 说明 -->
+            <div class="flex items-center">
+              <n-input 
+                v-model:value="row.description" 
+                placeholder="寄存器说明"
+                class="text-sm"
+                @update:value="updateRow(row.id, 'description', $event)"
+              />
+            </div>
+
+           
           </div>
         </div>
       </div>
@@ -284,7 +288,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { NSelect, NButton, NTag, NInput, NIcon, NCheckbox, NInputNumber, useMessage } from 'naive-ui'
 import { useSerialStore } from '@/store/serial'
 import BitEditor from './components/BitEditor.vue'
@@ -570,7 +574,21 @@ const deleteSelected = async () => {
 const updateRow = (id: number, field: keyof RegisterRow, value: string) => {
   const row = registerRows.value.find(r => r.id === id)
   if (row) {
-    row[field] = value
+    // 如果是地址字段，确保使用小写的 0x 前缀
+    if (field === 'address' && value) {
+      let normalizedValue = value
+      if (normalizedValue.startsWith('0X')) {
+        normalizedValue = normalizedValue.replace('0X', '0x')
+      }
+      // 将十六进制数字部分转换为大写，但保持 0x 前缀为小写
+      if (normalizedValue.startsWith('0x')) {
+        const hexPart = normalizedValue.substring(2).toUpperCase()
+        normalizedValue = `0x${hexPart}`
+      }
+      row.address = normalizedValue
+    } else {
+      (row as any)[field] = value
+    }
   }
 }
 
@@ -578,7 +596,16 @@ const updateRow = (id: number, field: keyof RegisterRow, value: string) => {
 const updateRowData = (id: number, value: string) => {
   const row = registerRows.value.find(r => r.id === id)
   if (row && value) {
-    const normalizedValue = value.toUpperCase()
+    // 确保使用小写的 0x 前缀
+    let normalizedValue = value
+    if (normalizedValue.startsWith('0X')) {
+      normalizedValue = normalizedValue.replace('0X', '0x')
+    }
+    // 将十六进制数字部分转换为大写，但保持 0x 前缀为小写
+    if (normalizedValue.startsWith('0x')) {
+      const hexPart = normalizedValue.substring(2).toUpperCase()
+      normalizedValue = `0x${hexPart}`
+    }
     row.data = normalizedValue
     row.value32bit = normalizedValue
   }
@@ -669,16 +696,46 @@ const readRegister = async (row: RegisterRow) => {
   }
   
   try {
+    console.log('🔍 开始读取寄存器:', {
+      address: row.address,
+      currentData: row.data,
+      currentValue32bit: row.value32bit
+    })
+    
     const res = await apiReadRegister({ address: row.address })
-    console.log('读取寄存器结果:', res)
+    console.log('📊 读取寄存器API响应:', res)
+    console.log('📊 响应类型:', typeof res)
+    console.log('📊 响应值:', res.value)
+    console.log('📊 响应值类型:', typeof res.value)
+    console.log('📊 响应成功状态:', res.success)
     
-    // 更新行数据
-    row.data = res.value
-    row.value32bit = res.value
-    
-    message.success(`读取寄存器 ${row.address} 成功: ${res.value}`)
+    if (res.success && res.value !== null && res.value !== undefined) {
+      // 更新行数据
+      row.data = res.value
+      row.value32bit = res.value
+      
+      console.log('✅ 更新后的行数据:', {
+        address: row.address,
+        data: row.data,
+        value32bit: row.value32bit
+      })
+      
+      message.success(`读取寄存器 ${row.address} 成功: ${res.value}`)
+    } else {
+      console.warn('⚠️ 读取失败或返回值为空:', {
+        success: res.success,
+        value: res.value,
+        message: res.message
+      })
+      message.warning(`读取寄存器 ${row.address} 返回空值`)
+    }
   } catch (error) {
-    console.error('读取寄存器失败:', error)
+    console.error('❌ 读取寄存器失败:', error)
+    console.error('❌ 错误详情:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    })
     message.error(`读取寄存器 ${row.address} 失败`)
   }
 }
@@ -691,14 +748,52 @@ const writeRegister = async (row: RegisterRow) => {
   }
   
   try {
+    console.log('🔍 开始写入寄存器:', {
+      address: row.address,
+      value: row.data,
+      valueType: typeof row.data
+    })
+    
     const res = await apiWriteRegister({ 
       address: row.address, 
       value: row.data 
     })
-    console.log('写入寄存器结果:', res)
-    message.success(`写入寄存器 ${row.address} 成功`)
+    
+    console.log('📊 写入寄存器API响应:', res)
+    console.log('📊 写入成功状态:', res.success)
+    
+    if (res.success) {
+      message.success(`写入寄存器 ${row.address} 成功`)
+      
+      // 写入成功后，自动读取验证
+      console.log('🔄 写入成功，开始验证读取...')
+      setTimeout(async () => {
+        try {
+          const readRes = await apiReadRegister({ address: row.address })
+          console.log('🔍 验证读取结果:', readRes)
+          
+          if (readRes.success && readRes.value) {
+            console.log('✅ 验证成功，读取到的值:', readRes.value)
+            message.success(`验证读取成功: ${readRes.value}`)
+          } else {
+            console.warn('⚠️ 验证读取失败或返回空值')
+            message.warning('验证读取返回空值')
+          }
+        } catch (verifyError) {
+          console.error('❌ 验证读取失败:', verifyError)
+          message.error('验证读取失败')
+        }
+      }, 1000) // 延迟1秒后验证
+    } else {
+      message.error(`写入寄存器 ${row.address} 失败`)
+    }
   } catch (error) {
-    console.error('写入寄存器失败:', error)
+    console.error('❌ 写入寄存器失败:', error)
+    console.error('❌ 错误详情:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    })
     message.error(`写入寄存器 ${row.address} 失败`)
   }
 }
@@ -771,17 +866,62 @@ const importConfig = () => {
   input.click()
 }
 
+// 测试串口状态提示
+const testPortStatus = () => {
+  console.log('🧪 测试串口状态提示...')
+  console.log('📊 当前状态:', serialStore.portStatus)
+  
+  // 使用message显示测试提示
+  message.warning('测试：串口 COM3 已断开或不存在')
+  console.log('📊 显示测试消息')
+}
+
+// 串口状态事件监听器
+const handleSerialPortDisconnected = (event: CustomEvent) => {
+  message.warning(`串口 ${event.detail.port} 已断开或不存在`)
+}
+
+const handleSerialPortAdded = (event: CustomEvent) => {
+  message.success(`检测到新串口: ${event.detail.ports.join(', ')}`)
+}
+
+const handleSerialPortRemoved = (event: CustomEvent) => {
+  message.error(`串口已断开: ${event.detail.ports.join(', ')}`)
+}
+
+const handleSerialNoPorts = () => {
+  message.error('未检测到任何串口设备')
+}
+
+const handleSerialPortsDetected = (event: CustomEvent) => {
+  message.success(`检测到 ${event.detail.count} 个串口设备`)
+}
+
 // 生命周期钩子：自动启动串口监听
 onMounted(() => {
   // 启动串口监听
   serialStore.startPortMonitoring()
   console.log('串口监听已启动')
+  
+  // 添加事件监听器
+  window.addEventListener('serial-port-disconnected', handleSerialPortDisconnected as EventListener)
+  window.addEventListener('serial-port-added', handleSerialPortAdded as EventListener)
+  window.addEventListener('serial-port-removed', handleSerialPortRemoved as EventListener)
+  window.addEventListener('serial-no-ports', handleSerialNoPorts as EventListener)
+  window.addEventListener('serial-ports-detected', handleSerialPortsDetected as EventListener)
 })
 
 onUnmounted(() => {
   // 停止串口监听
   serialStore.stopPortMonitoring()
   console.log('串口监听已停止')
+  
+  // 移除事件监听器
+  window.removeEventListener('serial-port-disconnected', handleSerialPortDisconnected as EventListener)
+  window.removeEventListener('serial-port-added', handleSerialPortAdded as EventListener)
+  window.removeEventListener('serial-port-removed', handleSerialPortRemoved as EventListener)
+  window.removeEventListener('serial-no-ports', handleSerialNoPorts as EventListener)
+  window.removeEventListener('serial-ports-detected', handleSerialPortsDetected as EventListener)
 })
 </script>
 
@@ -800,13 +940,11 @@ onUnmounted(() => {
   border: 1px solid #e5e7eb;
 }
 
-.table-content {
-}
 
 .table-header-row,
 .table-row {
   display: grid;
-  grid-template-columns: 16px 36px 110px 110px  1fr 300px  160px;
+  grid-template-columns: 16px 36px 100px 100px 150px 1fr 250px;
 }
 
 /* 悬浮与选中行高亮 */
@@ -825,14 +963,14 @@ onUnmounted(() => {
 @media (max-width: 1200px) {
   .table-header-row,
   .table-row {
-    grid-template-columns: 14px 32px 100px 100px  1fr 260px 140px;
+    grid-template-columns: 14px 32px 100px 100px 100px 260px 140px;
   }
 }
 
 @media (max-width: 768px) {
   .table-header-row,
   .table-row {
-    grid-template-columns: 12px 28px 88px 88px 1fr 220px 110px;
+    grid-template-columns: 12px 28px 88px 88px 80px 220px 110px;
     gap: 6px;
     padding: 6px 8px;
   }

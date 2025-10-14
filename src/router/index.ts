@@ -1,8 +1,8 @@
 /*
  * @Author: nll
  * @Date: 2025-09-24 14:11:55
- * @LastEditors: nll
- * @LastEditTime: 2025-10-09 15:00:29
+ * @LastEditors: '艾琳爱' '2664840261@qq.com'
+ * @LastEditTime: 2025-10-13 10:59:21
  * @Description: 
  */
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
@@ -15,7 +15,7 @@ const routes: Array<RouteRecordRaw> = [
   {
     path: '/home',
     component: () => import('@/views/Home.vue'),
-    redirect: '/home/serial',
+    redirect: '/home/register',
     children: [
     
       {

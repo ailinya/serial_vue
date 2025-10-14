@@ -17,11 +17,11 @@ export interface RegisterReadReq {
 
 export interface RegisterReadResp {
   access_type: string    // "READ"
-  address: string       // 寄存器地址，如 "0x20470c04"
+  address: string       // 寄存器地址，如 "0x20470C04"
   message: string       // 操作消息，如 "寄存器读取成功,读取4字节"
   success: boolean      // 操作是否成功
   timestamp: string     // 时间戳，如 "2025-10-10T16:56:16.634822"
-  value: string         // 十六进制数据，如 "0X20470004"
+  value: string         // 十六进制数据，如 "0x20470004"
 }
 
 export interface RegisterWriteReq {

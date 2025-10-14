@@ -1,8 +1,8 @@
 /*
  * @Author: nll
  * @Date: 2025-09-24 11:10:08
- * @LastEditors: nll
- * @LastEditTime: 2025-10-09 14:07:26
+ * @LastEditors: '艾琳爱' '2664840261@qq.com'
+ * @LastEditTime: 2025-10-13 13:30:42
  * @Description: 
  */
 import { defineConfig } from 'vite'
@@ -55,7 +55,25 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '/api') // 移除 /api 前缀
       },
-   
+      // 代理 WebSocket 连接
+      '/ws': {
+        target: 'ws://localhost:9993', // 直接使用WebSocket目标
+        ws: true, // 启用 WebSocket 代理
+        changeOrigin: true,
+        secure: false,
+        configure: (proxy, options) => {
+          console.log('WebSocket代理配置:', options);
+          proxy.on('error', (err, req, res) => {
+            console.log('WebSocket代理错误:', err);
+            console.log('请求URL:', req.url);
+          });
+          proxy.on('proxyReqWs', (proxyReq, req, socket) => {
+            console.log('WebSocket代理请求:', req.url);
+            console.log('代理目标:', proxyReq.getHeader('host'));
+          });
+         
+        }
+      }
     }
   }
   
