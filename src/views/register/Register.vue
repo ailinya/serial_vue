@@ -95,9 +95,63 @@
       <!-- 表头工具栏 -->
       <div class="table-header p-4 border-b border-gray-200">
         <div class="flex items-center justify-start">
-          <div class="flex items-center gap-2">
-            <h3 class="text-lg font-semibold text-gray-700">• 寄存器读写表</h3>
-            <n-tag v-if="selectedCount > 0" size="small" type="info">已选择 {{ selectedCount }} 行</n-tag>
+              <div class="flex items-center gap-2">
+                <!-- 表选择下拉 + 新建表弹出 -->
+                <n-select
+                  v-model:value="selectedTableId"
+                  :options="tableOptions"
+                  placeholder="选择寄存器表"
+                  style="width: 260px;"
+                  @update:value="onSelectTable"
+                />
+
+                <n-popover v-model:show="addingTablePopoverVisible" trigger="click" placement="bottom">
+                  <template #default>
+                    <div class="p-3 w-64">
+                      <n-input v-model:value="newTableName" placeholder="输入寄存器表名" size="small" />
+                      <div class="mt-2 flex justify-end gap-2">
+                        <n-button size="small" @click="addingTablePopoverVisible = false">取消</n-button>
+                        <n-button size="small" type="primary" @click="confirmAddTable">添加</n-button>
+                      </div>
+                    </div>
+                  </template>
+                  <template #trigger>
+                    <n-button size="small">新建表</n-button>
+                  </template>
+                </n-popover>
+
+                <n-popover v-model:show="renamingPopoverVisible" trigger="click" placement="bottom">
+                  <template #default>
+                    <div class="p-3 w-72">
+                      <n-input v-model:value="renameTableName" placeholder="输入新表名" size="small" ref="renameInputRef" />
+                      <div v-if="renameError" class="text-red-500 text-sm mt-2">{{ renameError }}</div>
+                      <div class="mt-2 flex justify-end gap-2">
+                        <n-button size="small" @click="renamingPopoverVisible = false">取消</n-button>
+                        <n-button :disabled="renameDisabled" size="small" type="primary" @click="confirmRenameTable">重命名</n-button>
+                      </div>
+                    </div>
+                  </template>
+                  <template #trigger>
+                    <n-button size="small">重命名</n-button>
+                  </template>
+                </n-popover>
+
+                <n-popover v-model:show="deleteConfirmVisible" trigger="click" placement="bottom">
+                  <template #default>
+                    <div class="p-3 w-64">
+                      <div class="text-sm">确定要删除当前表吗？此操作无法撤销。</div>
+                      <div class="mt-3 flex justify-end gap-2">
+                        <n-button size="small" @click="deleteConfirmVisible = false">取消</n-button>
+                        <n-button size="small" type="error" @click="confirmDeleteTable">删除</n-button>
+                      </div>
+                    </div>
+                  </template>
+                  <template #trigger>
+                    <n-button size="small" type="error">删除表</n-button>
+                  </template>
+                </n-popover>
+
+                <n-tag v-if="selectedCount > 0" size="small" type="info">已选择 {{ selectedCount }} 行</n-tag>
 
             <!-- 将工具按钮移动到标题后，使其更靠左 -->
             <div class="flex items-center gap-2 ml-4">
@@ -296,8 +350,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { NSelect, NButton, NTag, NInput, NIcon, NCheckbox, NInputNumber, useMessage } from 'naive-ui'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { NSelect, NButton, NTag, NInput, NIcon, NCheckbox, NInputNumber, NPopover, useMessage } from 'naive-ui'
 import { useSerialStore } from '@/store/serial'
 import BitEditor from './components/BitEditor.vue'
 
@@ -384,7 +438,13 @@ const onDragStart = (index: number) => {
 const onDrop = (targetIndex: number) => {
   if (draggingIndex.value === null || draggingIndex.value === targetIndex) return
   const list = [...registerRows.value]
-  const [moved] = list.splice(draggingIndex.value, 1)
+  const removed = list.splice(draggingIndex.value, 1)
+  const moved = removed[0]
+  if (!moved) {
+    // nothing removed or invalid index, reset and exit
+    draggingIndex.value = null
+    return
+  }
   list.splice(targetIndex, 0, moved)
   registerRows.value = list
   draggingIndex.value = null
@@ -429,6 +489,184 @@ interface RegisterRow {
 // 寄存器行数据
 const registerRows = ref<RegisterRow[]>([])
 
+// 多个寄存器表支持
+interface RegisterTable {
+  id: string
+  name: string
+  rows: RegisterRow[]
+}
+
+const TABLES_STORAGE_KEY = 'register_tables_v1'
+
+const tables = ref<RegisterTable[]>([])
+const selectedTableId = ref<string | null>(null)
+const addingTablePopoverVisible = ref(false)
+const newTableName = ref('')
+
+const tableOptions = computed(() => tables.value.map(t => ({ label: t.name, value: t.id })))
+
+// 加载本地存储的表
+const loadTablesFromStorage = () => {
+  try {
+    const raw = localStorage.getItem(TABLES_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as RegisterTable[]
+      tables.value = parsed
+      const first = tables.value && tables.value.length ? tables.value[0] : undefined
+      if (first && first.id) selectedTableId.value = first.id
+    } else {
+      // 初始化一个默认表
+      const defaultTable: RegisterTable = { id: String(Date.now()), name: '默认表', rows: [] }
+      tables.value = [defaultTable]
+      selectedTableId.value = defaultTable.id
+      saveTablesToStorage()
+    }
+  } catch (e) {
+    console.error('加载寄存器表失败:', e)
+  }
+}
+
+const saveTablesToStorage = () => {
+  try {
+    localStorage.setItem(TABLES_STORAGE_KEY, JSON.stringify(tables.value))
+  } catch (e) {
+    console.error('保存寄存器表失败:', e)
+  }
+}
+
+// 确认添加表
+const confirmAddTable = () => {
+  const name = newTableName.value?.trim()
+  if (!name) return
+  const t: RegisterTable = { id: String(Date.now()), name, rows: [] }
+  tables.value = [...tables.value, t]
+  newTableName.value = ''
+  addingTablePopoverVisible.value = false
+  selectedTableId.value = t.id
+}
+
+// 重命名表支持
+const renamingPopoverVisible = ref(false)
+const renameTableName = ref('')
+const renameError = ref('')
+const renameInputRef = ref<HTMLElement | null>(null)
+
+const renameDisabled = computed(() => {
+  const v = renameTableName.value?.trim()
+  if (!v) return true
+  // 若与当前表名相同也禁止
+  const idx = tables.value.findIndex(t => t.id === selectedTableId.value)
+  const item = tables.value[idx]
+  const currentName = item?.name ?? ''
+  if (v === currentName) return true
+  // 与别的表重名则禁止
+  const exists = tables.value.some(t => t.name === v && t.id !== selectedTableId.value)
+  return exists
+})
+
+watch(renamingPopoverVisible, (v) => {
+  if (v) {
+    // 打开弹出时把输入框置为当前表名并聚焦
+  const idx = tables.value.findIndex(t => t.id === selectedTableId.value)
+  const item = tables.value[idx]
+  renameTableName.value = item?.name ?? ''
+    renameError.value = ''
+    // nextTick + focus
+    setTimeout(() => {
+      const el = (renameInputRef.value as any)?.$el || renameInputRef.value
+      if (el && typeof (el as HTMLElement).focus === 'function') (el as HTMLElement).focus()
+    }, 0)
+  }
+})
+
+const confirmRenameTable = () => {
+  const newName = renameTableName.value?.trim()
+  if (!newName) {
+    renameError.value = '表名不能为空'
+    return
+  }
+  const exists = tables.value.some(t => t.name === newName && t.id !== selectedTableId.value)
+  if (exists) {
+    renameError.value = '存在同名表'
+    return
+  }
+  const idx = tables.value.findIndex(t => t.id === selectedTableId.value)
+  if (idx === -1) {
+    message.error('未找到当前表')
+    renamingPopoverVisible.value = false
+    return
+  }
+  const existing = tables.value[idx]
+  if (existing) {
+    tables.value[idx] = { id: existing.id, name: newName, rows: existing.rows }
+    saveTablesToStorage()
+    message.success('重命名成功')
+  }
+  renamingPopoverVisible.value = false
+}
+
+// 删除确认弹出控制与执行
+const deleteConfirmVisible = ref(false)
+const confirmDeleteTable = () => {
+  deleteConfirmVisible.value = false
+  if (!selectedTableId.value) {
+    message.warning('当前未选择表')
+    return
+  }
+  const idx = tables.value.findIndex(t => t.id === selectedTableId.value)
+  if (idx === -1) return
+  tables.value.splice(idx, 1)
+
+  // 如果删除后无表，创建默认表
+  if (tables.value.length === 0) {
+    const defaultTable: RegisterTable = { id: String(Date.now()), name: '默认表', rows: [] }
+    tables.value = [defaultTable]
+    selectedTableId.value = defaultTable.id
+    registerRows.value = []
+  } else {
+    const nextIdx = Math.min(idx, tables.value.length - 1)
+    const nextItem = tables.value[nextIdx]
+    if (nextItem) {
+      selectedTableId.value = nextItem.id
+      registerRows.value = nextItem.rows || []
+    } else {
+      selectedTableId.value = tables.value[0]?.id ?? null
+      registerRows.value = []
+    }
+  }
+  saveTablesToStorage()
+  message.success('已删除表')
+}
+
+// 选择表时切换 registerRows
+const onSelectTable = (val: string) => {
+  selectedTableId.value = val
+}
+
+// 当 selectedTableId 或 tables 改变时，保持 registerRows 与表同步
+watch(selectedTableId, (newId) => {
+  const t = tables.value.find(x => x.id === newId)
+  if (t) {
+    registerRows.value = t.rows || []
+  } else {
+    registerRows.value = []
+  }
+})
+
+// 当 registerRows 改变时，保存到对应表
+watch(registerRows, (newRows) => {
+  const idx = tables.value.findIndex(x => x.id === selectedTableId.value)
+  if (idx > -1) {
+    // 用浅拷贝替换 rows，保持响应性
+    const copy = [...newRows]
+    const existing = tables.value[idx]
+    if (existing) {
+      tables.value[idx] = { id: existing.id as string, name: existing.name as string, rows: copy }
+    }
+    saveTablesToStorage()
+  }
+}, { deep: true })
+
 // 选择状态
 const selectedIds = ref<Set<number>>(new Set())
 const selectedCount = computed(() => selectedIds.value.size)
@@ -457,7 +695,18 @@ const getRegisterList = async () => {
           value32bit: item.value32bit || item.data || '0x00000000',
           description: item.description || ''
         }))
-        
+
+        // 如果存在已加载的表格，保存到当前选中表并持久化；否则直接显示
+        if (tables.value.length > 0 && selectedTableId.value) {
+          const idx = tables.value.findIndex(t => t.id === selectedTableId.value)
+          if (idx > -1) {
+            const existing = tables.value[idx]
+            if (existing) {
+              tables.value[idx] = { id: existing.id, name: existing.name, rows: registerRowsData }
+              saveTablesToStorage()
+            }
+          }
+        }
         registerRows.value = registerRowsData
         message.success(`已加载 ${registerRowsData.length} 个寄存器配置`)
       } else {
@@ -475,6 +724,8 @@ const getRegisterList = async () => {
 }
 
 onMounted(() => {
+  // load persisted tables before fetching list so API-loaded items can be saved into the current table
+  loadTablesFromStorage()
   getPortList()
   getRegisterList()
 })
@@ -519,15 +770,15 @@ const bulkRead = async () => {
       // 更新选中行的数据
       res.results.forEach(result => {
         const row = registerRows.value.find(r => r.address === result.address)
-        if (row && result.status === 'success') {  // 修复：检查 status 而不是 success
+        if (row && result.success) {  // API uses 'success' not 'status'
           row.data = result.value
           row.value32bit = result.value
         }
       })
       
       // 统计成功和失败的数量
-      const successCount = res.results.filter(r => r.status === 'success').length
-      const failedCount = res.results.filter(r => r.status === 'failed').length
+      const successCount = res.results.filter(r => r.success).length
+      const failedCount = res.results.filter(r => !r.success).length
       
       if (failedCount > 0) {
         message.warning(`批量读取完成，成功 ${successCount} 个，失败 ${failedCount} 个`)
@@ -565,8 +816,8 @@ const bulkWrite = async () => {
     
     if (res.success) {
       // 统计成功和失败的数量
-      const successCount = res.results.filter(r => r.status === 'success').length
-      const failedCount = res.results.filter(r => r.status === 'failed').length
+      const successCount = res.results.filter(r => r.success).length
+      const failedCount = res.results.filter(r => !r.success).length
       
       if (failedCount > 0) {
         message.warning(`批量写入完成，成功 ${successCount} 个，失败 ${failedCount} 个`)
@@ -702,7 +953,12 @@ const deleteRow = async (id: number) => {
 }
 
 // 保存寄存器
-const saveRegister = async (row: RegisterRow) => {
+const saveRegister = async (row: RegisterRow | undefined) => {
+  if (!row) {
+    message.error('寄存器数据无效')
+    return
+  }
+  
   try {
     const res = await apiSaveRegister({
       address: row.address,
@@ -734,7 +990,12 @@ const saveRegister = async (row: RegisterRow) => {
 }
 
 // 读取寄存器
-const readRegister = async (row: RegisterRow) => {
+const readRegister = async (row: RegisterRow | undefined) => {
+  if (!row) {
+    message.error('寄存器数据无效')
+    return
+  }
+  
   if (!serialStore.isConnected) {
     message.error('串口未连接')
     return
@@ -776,17 +1037,24 @@ const readRegister = async (row: RegisterRow) => {
     }
   } catch (error) {
     console.error('❌ 读取寄存器失败:', error)
-    console.error('❌ 错误详情:', {
-      name: error.name,
-      message: error.message,
-      stack: error.stack
-    })
+    if (error instanceof Error) {
+      console.error('❌ 错误详情:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      })
+    }
     message.error(`读取寄存器 ${row.address} 失败`)
   }
 }
 
 // 写入寄存器
-const writeRegister = async (row: RegisterRow) => {
+const writeRegister = async (row: RegisterRow | undefined) => {
+  if (!row) {
+    message.error('寄存器数据无效')
+    return
+  }
+  
   if (!serialStore.isConnected) {
     message.error('串口未连接')
     return
@@ -834,11 +1102,13 @@ const writeRegister = async (row: RegisterRow) => {
     }
   } catch (error) {
     console.error('❌ 写入寄存器失败:', error)
-    console.error('❌ 错误详情:', {
-      name: error.name,
-      message: error.message,
-      stack: error.stack
-    })
+    if (error instanceof Error) {
+      console.error('❌ 错误详情:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      })
+    }
     message.error(`写入寄存器 ${row.address} 失败`)
   }
 }
@@ -882,13 +1152,13 @@ const importConfig = () => {
           throw new Error('配置文件格式错误：应该是数组格式')
         }
         
-        const validatedData = jsonData.map((item, index) => {
+        const validatedData: RegisterRow[] = jsonData.map((item, index) => {
           if (typeof item !== 'object' || !item) {
             throw new Error(`配置项 ${index + 1} 格式错误`)
           }
           
           return {
-            id: Date.now().toString() + index,
+            id: Date.now() + index, // Use number instead of string
             address: item.address || '0x00000000',
             data: item.data || '0x00000000',
             value32bit: item.value32bit || '0x00000000',
@@ -911,15 +1181,15 @@ const importConfig = () => {
   input.click()
 }
 
-// 测试串口状态提示
-const testPortStatus = () => {
-  console.log('🧪 测试串口状态提示...')
-  console.log('📊 当前状态:', serialStore.portStatus)
-  
-  // 使用message显示测试提示
-  message.warning('测试：串口 COM3 已断开或不存在')
-  console.log('📊 显示测试消息')
-}
+// 测试串口状态提示 (removed - unused function)
+// const testPortStatus = () => {
+//   console.log('🧪 测试串口状态提示...')
+//   console.log('📊 当前状态:', serialStore.portStatus)
+//   
+//   // 使用message显示测试提示
+//   message.warning('测试：串口 COM3 已断开或不存在')
+//   console.log('📊 显示测试消息')
+// }
 
 // 串口状态事件监听器
 const handleSerialPortDisconnected = (event: CustomEvent) => {
