@@ -94,11 +94,17 @@ export interface BatchReadReq {
 export interface BatchReadResp {
   success: boolean
   message: string
+  total_operations: number
+  successful_operations: number
+  failed_operations: number
   results: Array<{
     address: string
     value: string
     success: boolean
+    message?: string
+    timestamp?: string
   }>
+  timestamp: string
 }
 
 export function apiBatchRead(payload: BatchReadReq) {
@@ -116,10 +122,17 @@ export interface BatchWriteReq {
 export interface BatchWriteResp {
   success: boolean
   message: string
+  total_operations: number
+  successful_operations: number
+  failed_operations: number
   results: Array<{
     address: string
+    value: string
     success: boolean
+    message?: string
+    timestamp?: string
   }>
+  timestamp: string
 }
 
 export function apiBatchWrite(payload: BatchWriteReq) {
