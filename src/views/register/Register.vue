@@ -768,11 +768,19 @@ const bulkRead = async () => {
     
     if (res.success) {
       // 更新选中行的数据
+      const updatedRowIds = new Set<number>()
       res.results.forEach(result => {
-        const row = registerRows.value.find(r => r.address === result.address)
-        if (row && result.success) {  // API uses 'success' not 'status'
-          row.data = result.value
-          row.value32bit = result.value
+        // 查找与结果地址匹配且尚未更新的选定行
+        const rowToUpdate = registerRows.value.find(r =>
+          r.address === result.address &&
+          selectedIds.value.has(r.id) &&
+          !updatedRowIds.has(r.id)
+        )
+
+        if (rowToUpdate && result.success) {
+          rowToUpdate.data = result.value
+          rowToUpdate.value32bit = result.value
+          updatedRowIds.add(rowToUpdate.id) // 标记此行为已更新
         }
       })
       
