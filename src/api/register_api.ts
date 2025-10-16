@@ -226,3 +226,24 @@ export interface SendCommandResp {
 export function apiSendCommand(payload: SendCommandReq) {
   return post<SendCommandResp>('/register/send-command', payload)
 }
+
+// 上传Excel文件
+export interface ExcelUploadResp {
+  success: boolean
+  message: string
+  data: Array<{
+    name: string
+    rows: Array<{
+      address: string
+      data: string
+      description: string
+    }>
+  }>
+  debug?: string[]
+}
+
+export function apiUploadExcelAsBase64(base64Content: string) {
+  return post<ExcelUploadResp>('/register/upload-excel', {
+    file_content: base64Content
+  })
+}

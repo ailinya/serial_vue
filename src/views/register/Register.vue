@@ -184,6 +184,14 @@
                 </template>
                 导入配置
               </n-button>
+              <n-button type="primary" size="small" @click="importFromExcel" class="flex items-center gap-1">
+                <template #icon>
+                  <n-icon>
+                    <span>📄</span>
+                  </n-icon>
+                </template>
+                导入Excel
+              </n-button>
               <n-button type="info" size="small" @click="exportConfig" class="flex items-center gap-1">
                 <template #icon>
                   <n-icon>
@@ -355,7 +363,7 @@ import { NSelect, NButton, NTag, NInput, NIcon, NCheckbox, NInputNumber, NPopove
 import { useSerialStore } from '@/store/serial'
 import BitEditor from './components/BitEditor.vue'
 
-import { apiGetPortList, apiConnectSerial, apiDisconnectSerial, apiReadRegister, apiWriteRegister, apiBatchRead, apiBatchWrite, apiSaveRegister, apiListRegisters, apiDeleteRegister, apiBatchDeleteRegisters, apiSendCommand } from '@/api/register_api'
+import { apiGetPortList, apiConnectSerial, apiDisconnectSerial, apiReadRegister, apiWriteRegister, apiBatchRead, apiBatchWrite, apiSaveRegister, apiListRegisters, apiDeleteRegister, apiBatchDeleteRegisters, apiSendCommand, apiUploadExcelAsBase64 } from '@/api/register_api'
 // 使用串口状态管理
 const serialStore = useSerialStore()
 const message = useMessage()
@@ -1184,6 +1192,85 @@ const importConfig = () => {
     }
     
     reader.readAsText(file)
+  }
+  
+  input.click()
+}
+
+// 从Excel导入 (使用Base64)
+const importFromExcel = () => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.xlsx'
+  
+  input.onchange = (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.readAsDataURL(file)
+    reader.onload = async (event) => {
+      try {
+        const base64Content = (event.target?.result as string).split(',')[1]
+        if (!base64Content) {
+          message.error('无法读取文件内容')
+          return
+        }
+
+        const res = await apiUploadExcelAsBase64(base64Content)
+        
+        // 首先检查是否有调试信息，并显示它们
+        if (res.debug && res.debug.length > 0) {
+          res.debug.forEach(msg => {
+            message.warning(`[调试] ${msg}`, { duration: 10000 })
+          })
+        }
+
+        if (res.success && res.data && res.data.length > 0) {
+          // 为每个sheet创建一个新表
+          res.data.forEach(sheetData => {
+            const newTable: RegisterTable = {
+              id: String(Date.now()) + Math.random(),
+              name: sheetData.name,
+              rows: sheetData.rows.map((row, index) => ({
+                id: Date.now() + index,
+                address: row.address,
+                data: row.data,
+                value32bit: row.data, // 初始时32位值与数据相同
+                description: row.description
+              }))
+            }
+            tables.value.push(newTable)
+          })
+          
+          saveTablesToStorage()
+          
+          // 切换到新创建的第一个表
+          if (res.data && res.data.length > 0) {
+            const firstSheetName = res.data[0]?.name;
+            if (firstSheetName) {
+              const firstNewTable = tables.value.find(t => t.name === firstSheetName)
+              if (firstNewTable) {
+                selectedTableId.value = firstNewTable.id
+              }
+            }
+          }
+          
+          message.success(`成功从Excel导入 ${res.data.length} 个寄存器表`)
+        } else {
+          // 即使请求成功，但如果没有数据，也提示用户
+          message.error(`Excel导入失败: ${res.message || '未解析到有效数据'}`)
+        }
+      } catch (error: any) {
+        console.error('Excel导入失败:', error)
+        const errorMsg = error.response?.data?.detail || '文件解析失败，请检查格式'
+        message.error(`导入失败: ${errorMsg}`)
+      }
+    }
+    reader.onerror = (error) => {
+      console.error('文件读取失败:', error)
+      message.error('文件读取失败')
+    }
   }
   
   input.click()
