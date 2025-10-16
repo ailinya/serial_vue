@@ -247,3 +247,8 @@ export function apiUploadExcelAsBase64(base64Content: string) {
     file_content: base64Content
   })
 }
+
+// 获取寄存器定义
+export function apiGetRegisterDefinitions() {
+  return get<any>('/register/definitions')
+}

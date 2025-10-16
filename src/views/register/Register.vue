@@ -136,20 +136,7 @@
                   </template>
                 </n-popover>
 
-                <n-popover v-model:show="deleteConfirmVisible" trigger="click" placement="bottom">
-                  <template #default>
-                    <div class="p-3 w-64">
-                      <div class="text-sm">确定要删除当前表吗？此操作无法撤销。</div>
-                      <div class="mt-3 flex justify-end gap-2">
-                        <n-button size="small" @click="deleteConfirmVisible = false">取消</n-button>
-                        <n-button size="small" type="error" @click="confirmDeleteTable">删除</n-button>
-                      </div>
-                    </div>
-                  </template>
-                  <template #trigger>
-                    <n-button size="small" type="error">删除表</n-button>
-                  </template>
-                </n-popover>
+                <n-button size="small" type="error" @click="confirmDeleteTable">删除表</n-button>
 
                 <n-tag v-if="selectedCount > 0" size="small" type="info">已选择 {{ selectedCount }} 行</n-tag>
 
@@ -335,6 +322,7 @@
             <div class="flex items-center justify-center">
               <BitEditor 
                 :value="row.value32bit || '0x00000000'" 
+                :bitfields="row.bitfields"
                 @update:value="updateRowData(row.id, $event)"
               />
             </div>
@@ -363,10 +351,29 @@ import { NSelect, NButton, NTag, NInput, NIcon, NCheckbox, NInputNumber, NPopove
 import { useSerialStore } from '@/store/serial'
 import BitEditor from './components/BitEditor.vue'
 
-import { apiGetPortList, apiConnectSerial, apiDisconnectSerial, apiReadRegister, apiWriteRegister, apiBatchRead, apiBatchWrite, apiSaveRegister, apiListRegisters, apiDeleteRegister, apiBatchDeleteRegisters, apiSendCommand, apiUploadExcelAsBase64 } from '@/api/register_api'
+import { 
+  apiGetPortList, 
+  apiConnectSerial, 
+  apiDisconnectSerial, 
+  apiReadRegister, 
+  apiWriteRegister, 
+  apiBatchRead, 
+  apiBatchWrite, 
+  apiSaveRegister, 
+  apiListRegisters, 
+  apiDeleteRegister, 
+  apiBatchDeleteRegisters, 
+  apiSendCommand, 
+  apiUploadExcelAsBase64,
+  apiGetRegisterDefinitions 
+} from '@/api/register_api'
+
 // 使用串口状态管理
 const serialStore = useSerialStore()
 const message = useMessage()
+
+// 寄存器定义
+const registerDefinitions = ref<any>({})
 
 // echoclose复选框状态，默认勾选
 const echoCloseEnabled = ref(true)
@@ -486,12 +493,20 @@ const removeCustomBaud = (valStr: string) => {
 }
 
 // 寄存器行数据类型
+interface Bitfield {
+  name: string;
+  start_bit: number;
+  end_bit: number;
+  type: 'RO' | 'RW' | 'Reserved';
+  description: string;
+}
 interface RegisterRow {
   id: number
   address: string
   data: string
   value32bit: string
   description: string
+  bitfields?: Bitfield[]
 }
 
 // 寄存器行数据
@@ -614,9 +629,7 @@ const confirmRenameTable = () => {
 }
 
 // 删除确认弹出控制与执行
-const deleteConfirmVisible = ref(false)
 const confirmDeleteTable = () => {
-  deleteConfirmVisible.value = false
   if (!selectedTableId.value) {
     message.warning('当前未选择表')
     return
@@ -687,6 +700,39 @@ const getPortList = async () => {
   console.log(res)
 }
 
+const findBitfieldsForAddress = (address: string) => {
+  if (!address) return undefined;
+
+  // 规范化地址：转换为大写，并移除任何下划线
+  const normalizedAddress = '0x' + address.substring(2).replace(/_/g, '').toUpperCase();
+
+  for (const sheetName in registerDefinitions.value) {
+    const sheet = registerDefinitions.value[sheetName];
+    for (const regName in sheet) {
+      const regData = sheet[regName];
+      
+      if (regData.address) {
+        const defAddress = regData.address;
+
+        if (defAddress.trim() === normalizedAddress) {
+          console.log(`[SUCCESS] 成功匹配地址: ${normalizedAddress}`);
+          return regData.bit_fields.map((bf: any) => ({
+            name: bf.name,
+            start_bit: bf.start_bit,
+            end_bit: bf.end_bit,
+            type: bf.type,
+            description: bf.description
+          }));
+        }
+      }
+    }
+  }
+  
+  console.warn(`[DIAGNOSTIC] 匹配失败: 未找到地址 "${normalizedAddress}" 的位域定义。`);
+
+  return undefined;
+};
+
 const getRegisterList = async () => {
   try {
     console.log('获取寄存器列表');
@@ -701,7 +747,8 @@ const getRegisterList = async () => {
           address: item.address,
           data: item.data || '0x00000000',
           value32bit: item.value32bit || item.data || '0x00000000',
-          description: item.description || ''
+          description: item.description || '',
+          bitfields: findBitfieldsForAddress(item.address)
         }))
 
         // 如果存在已加载的表格，保存到当前选中表并持久化；否则直接显示
@@ -731,12 +778,6 @@ const getRegisterList = async () => {
   }
 }
 
-onMounted(() => {
-  // load persisted tables before fetching list so API-loaded items can be saved into the current table
-  loadTablesFromStorage()
-  getPortList()
-  getRegisterList()
-})
 
 
 const isRowSelected = (id: number) => selectedIds.value.has(id)
@@ -930,7 +971,8 @@ const addRow = () => {
     address: '0x00000000',
     data: '0x00000000',
     value32bit: '0x00000000',
-    description: ''
+    description: '',
+    bitfields: findBitfieldsForAddress('0x00000000')
   }
   
   // 使用展开运算符创建新数组，确保响应式更新
@@ -1178,7 +1220,8 @@ const importConfig = () => {
             address: item.address || '0x00000000',
             data: item.data || '0x00000000',
             value32bit: item.value32bit || '0x00000000',
-            description: item.description || ''
+            description: item.description || '',
+            bitfields: findBitfieldsForAddress(item.address)
           }
         })
         
@@ -1227,6 +1270,17 @@ const importFromExcel = () => {
         }
 
         if (res.success && res.data && res.data.length > 0) {
+          // 强制刷新寄存器定义以获取最新解析逻辑
+          try {
+            console.log('导入Excel后，强制刷新寄存器定义...');
+            const defs = await apiGetRegisterDefinitions();
+            registerDefinitions.value = defs.data;
+            console.log('✅ 寄存器定义已刷新');
+          } catch (defError) {
+            console.error('刷新寄存器定义失败:', defError);
+            message.error('刷新寄存器定义失败，位域信息可能不正确。');
+          }
+
           // 为每个sheet创建一个新表
           res.data.forEach(sheetData => {
             const newTable: RegisterTable = {
@@ -1237,7 +1291,8 @@ const importFromExcel = () => {
                 address: row.address,
                 data: row.data,
                 value32bit: row.data, // 初始时32位值与数据相同
-                description: row.description
+                description: row.description,
+                bitfields: findBitfieldsForAddress(row.address)
               }))
             }
             tables.value.push(newTable)
@@ -1307,18 +1362,35 @@ const handleSerialPortsDetected = (event: CustomEvent) => {
   message.success(`检测到 ${event.detail.count} 个串口设备`)
 }
 
-// 生命周期钩子：自动启动串口监听
-onMounted(() => {
-  // 启动串口监听
+// 生命周期钩子
+onMounted(async () => {
+  // 1. 启动串口监听和事件监听
   serialStore.startPortMonitoring()
   console.log('串口监听已启动')
-  
-  // 添加事件监听器
   window.addEventListener('serial-port-disconnected', handleSerialPortDisconnected as EventListener)
   window.addEventListener('serial-port-added', handleSerialPortAdded as EventListener)
   window.addEventListener('serial-port-removed', handleSerialPortRemoved as EventListener)
   window.addEventListener('serial-no-ports', handleSerialNoPorts as EventListener)
   window.addEventListener('serial-ports-detected', handleSerialPortsDetected as EventListener)
+
+  // 2. 获取串口列表 (不依赖其他)
+  getPortList()
+
+  // 3. 关键：串行化数据加载，确保定义先加载
+  try {
+    // 首先，等待寄存器定义加载完成
+    const defs = await apiGetRegisterDefinitions();
+    registerDefinitions.value = defs.data;
+    console.log('✅ [DIAGNOSTIC] Register Definitions Loaded:', JSON.stringify(registerDefinitions.value, null, 2));
+
+    // 然后，在定义可用后，再加载表和列表
+    loadTablesFromStorage()
+    getRegisterList()
+
+  } catch (e) {
+    console.error("Failed to load register definitions", e);
+    message.error("加载寄存器定义失败");
+  }
 })
 
 onUnmounted(() => {
