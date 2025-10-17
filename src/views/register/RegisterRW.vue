@@ -35,7 +35,7 @@
             <p>暂无寄存器配置</p>
           </div>
           <div v-else>
-            <div v-for="(row, index) in registerRows" :key="row.id" class="grid gap-2 px-4 py-2 items-center border-b border-border/30" style="grid-template-columns: 80px 120px 1fr 180px 80px">
+            <div v-for="row in registerRows" :key="row.id" class="grid gap-2 px-4 py-2 items-center border-b border-border/30" style="grid-template-columns: 80px 120px 1fr 180px 80px">
               <!-- 地址输入 -->
               <input type="text" v-model="row.address" class="h-7 text-sm w-full text-center font-mono bg-background border rounded-md" />
               <!-- 数据输入 -->
@@ -57,12 +57,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import BitEditor from './components/BitEditor.vue';
-import { apiGetRegisterDefinitions } from '@/api/register_api';
 
 interface Bitfield {
   name: string;
-  range: [number, number];
+  start_bit: number;
+  end_bit: number;
   type: 'RO' | 'RW' | 'Reserved';
+  description: string;
 }
 
 interface RegisterRow {
@@ -77,40 +78,8 @@ interface RegisterRow {
 const registerRows = ref<RegisterRow[]>([]);
 const isLoading = ref(true);
 
-onMounted(async () => {
-  try {
-    const response = await apiGetRegisterDefinitions();
-    const definitions = response.data;
-    const newRows: RegisterRow[] = [];
-
-    const bleSystemRegisters = definitions['BLE_System'];
-    if (bleSystemRegisters) {
-      for (const regName in bleSystemRegisters) {
-        const regData = bleSystemRegisters[regName];
-        const bitfields = regData.bit_fields.map((bf: any) => ({
-          name: bf.name,
-          range: [bf.start_bit, bf.end_bit],
-          type: bf.type
-        }));
-
-        newRows.push({
-          id: regData.offset,
-          address: regData.offset,
-          data: regData.init_value,
-          value32bit: regData.init_value,
-          description: regName,
-          bitfields: bitfields
-        });
-      }
-    }
-    
-    registerRows.value = newRows;
-
-  } catch (error) {
-    console.error("Failed to fetch register definitions:", error);
-  } finally {
-    isLoading.value = false;
-  }
+onMounted(() => {
+  isLoading.value = false;
 });
 
 const addRow = () => {

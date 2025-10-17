@@ -13,7 +13,9 @@ import '@/styles/twind.css'
 // 导入全局自定义样式
 import '@/styles/global.scss'
 // 导入 Naive UI 主题样式
-import naive from 'naive-ui'
+import naive, { createDiscreteApi } from 'naive-ui'
+
+const { message } = createDiscreteApi(['message'])
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -23,6 +25,6 @@ app.use(router)
 app.use(naive)
 
 // 设置全局message实例
-app.config.globalProperties.$message = naive.message
+app.config.globalProperties.$message = message
 
 app.mount('#app')

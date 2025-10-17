@@ -364,16 +364,13 @@ import {
   apiDeleteRegister, 
   apiBatchDeleteRegisters, 
   apiSendCommand, 
-  apiUploadExcelAsBase64,
-  apiGetRegisterDefinitions 
+  apiUploadExcelAsBase64
 } from '@/api/register_api'
 
 // 使用串口状态管理
 const serialStore = useSerialStore()
 const message = useMessage()
 
-// 寄存器定义
-const registerDefinitions = ref<any>({})
 
 // echoclose复选框状态，默认勾选
 const echoCloseEnabled = ref(true)
@@ -700,38 +697,6 @@ const getPortList = async () => {
   console.log(res)
 }
 
-const findBitfieldsForAddress = (address: string) => {
-  if (!address) return undefined;
-
-  // 规范化地址：转换为大写，并移除任何下划线
-  const normalizedAddress = '0x' + address.substring(2).replace(/_/g, '').toUpperCase();
-
-  for (const sheetName in registerDefinitions.value) {
-    const sheet = registerDefinitions.value[sheetName];
-    for (const regName in sheet) {
-      const regData = sheet[regName];
-      
-      if (regData.address) {
-        const defAddress = regData.address;
-
-        if (defAddress.trim() === normalizedAddress) {
-          console.log(`[SUCCESS] 成功匹配地址: ${normalizedAddress}`);
-          return regData.bit_fields.map((bf: any) => ({
-            name: bf.name,
-            start_bit: bf.start_bit,
-            end_bit: bf.end_bit,
-            type: bf.type,
-            description: bf.description
-          }));
-        }
-      }
-    }
-  }
-  
-  console.warn(`[DIAGNOSTIC] 匹配失败: 未找到地址 "${normalizedAddress}" 的位域定义。`);
-
-  return undefined;
-};
 
 const getRegisterList = async () => {
   try {
@@ -739,8 +704,8 @@ const getRegisterList = async () => {
     const res = await apiListRegisters()
     console.log('寄存器列表:', res)
     
-    if (res.success) {
-      if (res.data.items.length > 0) {
+    if (res && res.success) {
+      if (res.data && res.data.items && res.data.items.length > 0) {
         // 将获取到的寄存器列表转换为表格行数据
         const registerRowsData = res.data.items.map((item, index) => ({
           id: item.id || (Date.now() + index),
@@ -748,7 +713,7 @@ const getRegisterList = async () => {
           data: item.data || '0x00000000',
           value32bit: item.value32bit || item.data || '0x00000000',
           description: item.description || '',
-          bitfields: findBitfieldsForAddress(item.address)
+          bitfields: undefined
         }))
 
         // 如果存在已加载的表格，保存到当前选中表并持久化；否则直接显示
@@ -770,11 +735,14 @@ const getRegisterList = async () => {
         message.info('暂无已保存的寄存器配置')
       }
     } else {
-      message.error(`加载失败: ${res.message}`)
+      const errorMessage = res ? res.message : '响应为空';
+      message.error(`加载失败: ${errorMessage}`)
+      console.error('加载失败，响应:', res);
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取寄存器列表失败:', error)
-    message.error('加载寄存器列表失败')
+    const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
+    message.error(`加载寄存器列表失败: ${errorMessage}`)
   }
 }
 
@@ -972,7 +940,7 @@ const addRow = () => {
     data: '0x00000000',
     value32bit: '0x00000000',
     description: '',
-    bitfields: findBitfieldsForAddress('0x00000000')
+    bitfields: undefined
   }
   
   // 使用展开运算符创建新数组，确保响应式更新
@@ -1221,7 +1189,7 @@ const importConfig = () => {
             data: item.data || '0x00000000',
             value32bit: item.value32bit || '0x00000000',
             description: item.description || '',
-            bitfields: findBitfieldsForAddress(item.address)
+                bitfields: undefined
           }
         })
         
@@ -1262,27 +1230,13 @@ const importFromExcel = () => {
 
         const res = await apiUploadExcelAsBase64(base64Content)
         
-        // 首先检查是否有调试信息，并显示它们
         if (res.debug && res.debug.length > 0) {
-          res.debug.forEach(msg => {
-            message.warning(`[调试] ${msg}`, { duration: 10000 })
-          })
+          res.debug.forEach(msg => message.warning(`[调试] ${msg}`, { duration: 10000 }))
         }
 
-        if (res.success && res.data && res.data.length > 0) {
-          // 强制刷新寄存器定义以获取最新解析逻辑
-          try {
-            console.log('导入Excel后，强制刷新寄存器定义...');
-            const defs = await apiGetRegisterDefinitions();
-            registerDefinitions.value = defs.data;
-            console.log('✅ 寄存器定义已刷新');
-          } catch (defError) {
-            console.error('刷新寄存器定义失败:', defError);
-            message.error('刷新寄存器定义失败，位域信息可能不正确。');
-          }
-
+        if (res.success && res.data) {
           // 为每个sheet创建一个新表
-          res.data.forEach(sheetData => {
+          res.data.tables.forEach(sheetData => {
             const newTable: RegisterTable = {
               id: String(Date.now()) + Math.random(),
               name: sheetData.name,
@@ -1290,9 +1244,9 @@ const importFromExcel = () => {
                 id: Date.now() + index,
                 address: row.address,
                 data: row.data,
-                value32bit: row.data, // 初始时32位值与数据相同
+                value32bit: row.data,
                 description: row.description,
-                bitfields: findBitfieldsForAddress(row.address)
+                bitfields: undefined
               }))
             }
             tables.value.push(newTable)
@@ -1301,19 +1255,18 @@ const importFromExcel = () => {
           saveTablesToStorage()
           
           // 切换到新创建的第一个表
-          if (res.data && res.data.length > 0) {
-            const firstSheetName = res.data[0]?.name;
-            if (firstSheetName) {
-              const firstNewTable = tables.value.find(t => t.name === firstSheetName)
+          if (res.data.tables.length > 0) {
+            const firstSheet = res.data.tables[0];
+            if (firstSheet) {
+              const firstNewTable = tables.value.find(t => t.name === firstSheet.name);
               if (firstNewTable) {
-                selectedTableId.value = firstNewTable.id
+                selectedTableId.value = firstNewTable.id;
               }
             }
           }
           
-          message.success(`成功从Excel导入 ${res.data.length} 个寄存器表`)
+          message.success(`成功从Excel导入 ${res.data.tables.length} 个寄存器表`)
         } else {
-          // 即使请求成功，但如果没有数据，也提示用户
           message.error(`Excel导入失败: ${res.message || '未解析到有效数据'}`)
         }
       } catch (error: any) {
@@ -1363,7 +1316,7 @@ const handleSerialPortsDetected = (event: CustomEvent) => {
 }
 
 // 生命周期钩子
-onMounted(async () => {
+onMounted(() => {
   // 1. 启动串口监听和事件监听
   serialStore.startPortMonitoring()
   console.log('串口监听已启动')
@@ -1373,24 +1326,12 @@ onMounted(async () => {
   window.addEventListener('serial-no-ports', handleSerialNoPorts as EventListener)
   window.addEventListener('serial-ports-detected', handleSerialPortsDetected as EventListener)
 
-  // 2. 获取串口列表 (不依赖其他)
+  // 2. 获取串口列表
   getPortList()
 
-  // 3. 关键：串行化数据加载，确保定义先加载
-  try {
-    // 首先，等待寄存器定义加载完成
-    const defs = await apiGetRegisterDefinitions();
-    registerDefinitions.value = defs.data;
-    console.log('✅ [DIAGNOSTIC] Register Definitions Loaded:', JSON.stringify(registerDefinitions.value, null, 2));
-
-    // 然后，在定义可用后，再加载表和列表
-    loadTablesFromStorage()
-    getRegisterList()
-
-  } catch (e) {
-    console.error("Failed to load register definitions", e);
-    message.error("加载寄存器定义失败");
-  }
+  // 3. 加载本地存储的表
+  loadTablesFromStorage()
+  getRegisterList()
 })
 
 onUnmounted(() => {

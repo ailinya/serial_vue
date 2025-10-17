@@ -229,26 +229,25 @@ export function apiSendCommand(payload: SendCommandReq) {
 
 // 上传Excel文件
 export interface ExcelUploadResp {
-  success: boolean
-  message: string
-  data: Array<{
-    name: string
-    rows: Array<{
-      address: string
-      data: string
-      description: string
-    }>
-  }>
-  debug?: string[]
+  success: boolean;
+  message: string;
+  data: {
+    tables: Array<{
+      name: string;
+      rows: Array<{
+        address: string;
+        data: string;
+        description: string;
+      }>;
+    }>;
+    definitions: any;
+  };
+  debug?: string[];
 }
+
 
 export function apiUploadExcelAsBase64(base64Content: string) {
   return post<ExcelUploadResp>('/register/upload-excel', {
     file_content: base64Content
   })
-}
-
-// 获取寄存器定义
-export function apiGetRegisterDefinitions() {
-  return get<any>('/register/definitions')
 }

@@ -140,15 +140,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { reactive } from 'vue'
 import { NSelect, NButton, NTag, NInputNumber, NSwitch, NIcon } from 'naive-ui'
 import { useSerialStore } from '@/store/serial'
 
 // 使用串口状态管理
 const serialStore = useSerialStore()
 
-// 连接状态数据
-const dataTransferBytes = ref(0)
 
 // 串口设置
 const settings = reactive({
@@ -196,39 +194,6 @@ const handleRtsChange = (value: boolean) => {
   console.log('RTS控制:', value)
 }
 
-// 连接状态相关方法
-const refreshPortList = () => {
-  console.log('刷新串口列表')
-  // 这里可以添加实际的刷新串口列表逻辑
-  // 模拟刷新
-  dataTransferBytes.value = Math.floor(Math.random() * 1000)
-}
-
-const testConnection = () => {
-  console.log('测试连接')
-  // 这里可以添加实际的测试连接逻辑
-  // 模拟测试
-  if (serialStore.selectedPort) {
-    serialStore.isConnected = true
-    dataTransferBytes.value = Math.floor(Math.random() * 10000)
-  }
-}
-
-const saveConfiguration = () => {
-  console.log('保存配置')
-  console.log('当前配置:', {
-    port: serialStore.selectedPort,
-    baudRate: settings.baudRate,
-    dataBits: settings.dataBits,
-    stopBits: settings.stopBits,
-    parity: settings.parity,
-    readTimeout: settings.readTimeout,
-    writeTimeout: settings.writeTimeout,
-    dtrControl: settings.dtrControl,
-    rtsControl: settings.rtsControl
-  })
-  // 这里可以添加实际的保存配置逻辑
-}
 </script>
 
 <style scoped lang="scss">

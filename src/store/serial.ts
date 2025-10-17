@@ -377,6 +377,34 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
+  const toggleConnection = async () => {
+    if (isConnected.value) {
+      // 断开连接
+      isConnecting.value = true;
+      try {
+        // 调用后端API断开连接
+        console.log('断开串口');
+      } catch (error) {
+        console.error('断开串口失败:', error);
+      } finally {
+        isConnecting.value = false;
+        isConnected.value = false;
+      }
+    } else {
+      // 连接
+      isConnecting.value = true;
+      try {
+        // 调用后端API连接
+        console.log('连接串口');
+      } catch (error) {
+        console.error('连接串口失败:', error);
+      } finally {
+        isConnecting.value = false;
+        isConnected.value = true;
+      }
+    }
+  };
+
   return {
     // 状态
     isConnected,
@@ -396,6 +424,7 @@ export const useSerialStore = defineStore('serial', () => {
     updateBaudRate,
     startPortMonitoring,
     stopPortMonitoring,
-    checkWebSocketStatus
+    checkWebSocketStatus,
+    toggleConnection
   }
 })

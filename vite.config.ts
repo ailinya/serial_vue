@@ -47,6 +47,9 @@ export default defineConfig({
     }
   },
   
+  build: {
+    outDir: 'dist'
+  },
   server: {
     proxy: {
       // 代理所有以 /api 开头的请求
@@ -63,11 +66,11 @@ export default defineConfig({
         secure: false,
         configure: (proxy, options) => {
           console.log('WebSocket代理配置:', options);
-          proxy.on('error', (err, req, res) => {
+          proxy.on('error', (err, req) => {
             console.log('WebSocket代理错误:', err);
             console.log('请求URL:', req.url);
           });
-          proxy.on('proxyReqWs', (proxyReq, req, socket) => {
+          proxy.on('proxyReqWs', (proxyReq, req) => {
             console.log('WebSocket代理请求:', req.url);
             console.log('代理目标:', proxyReq.getHeader('host'));
           });

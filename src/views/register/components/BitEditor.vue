@@ -130,7 +130,9 @@ const bitColorMap = computed(() => {
       const fieldColor = isReserved ? 'bg-gray-300' : colors[colorIndex % colors.length];
       
       for (let i = field.start_bit; i >= field.end_bit; i--) {
-        map.set(i, fieldColor);
+        if (fieldColor) {
+          map.set(i, fieldColor);
+        }
       }
 
       if (!isReserved) {
